@@ -11,8 +11,12 @@ function Test-Port([int]$port) {
 # --- locate the .NET SDK ---
 $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
 if (-not $dotnet) {
-    $portable = 'C:\Users\USER\AppData\Local\Temp\opencode\dotnet\sdk\dotnet.exe'
-    if (Test-Path $portable) { $dotnet = $portable }
+    foreach ($portable in @(
+        'C:\Users\USER\AppData\Local\Temp\opencode\dotnet\dotnet.exe',
+        'C:\Users\USER\AppData\Local\Temp\opencode\dotnet\sdk\dotnet.exe'
+    )) {
+        if (Test-Path $portable) { $dotnet = $portable; break }
+    }
 }
 if (-not $dotnet) { throw 'The .NET 8 SDK was not found. Install it (or use Docker) and try again.' }
 $dotnetDir = Split-Path -Parent $dotnet
@@ -28,7 +32,7 @@ if (Test-Port 5432) {
     $pgData = 'C:\Users\USER\AppData\Local\Temp\opencode\pgdata'
     if ((Test-Path (Join-Path $pgHome 'bin\pg_ctl.exe')) -and (Test-Path $pgData)) {
         Write-Host 'Starting local PostgreSQL...' -ForegroundColor Cyan
-        & (Join-Path $pgHome 'bin\pg_ctl.exe') -D $pgData -l (Join-Path $pgData 'server.log') start | Out-Null
+        & (Join-Path $pgHome 'bin\pg_ctl.exe') -D $pgData -l (Join-Path (Split-Path -Parent $pgData) 'pg-server.log') start | Out-Null
         Start-Sleep -Seconds 2
     }
 }

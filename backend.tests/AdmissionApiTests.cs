@@ -71,6 +71,33 @@ public sealed class AdmissionApiTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(1, after!.ConfirmedSeats);
     }
 
+    [Fact]
+    public async Task AdminCanEditAndDeleteClass()
+    {
+        var name = $"Editable {Guid.NewGuid()}";
+        var classResponse = await client.PostAsJsonAsync("/classes", new { name, totalSeats = 2 });
+        var cls = await classResponse.Content.ReadFromJsonAsync<CreateDto>();
+
+        for (var i = 0; i < 2; i++)
+        {
+            using var hold = new HttpRequestMessage(HttpMethod.Post, $"/classes/{cls!.Id}/holds");
+            hold.Headers.Add("X-Student-Id", $"4000000000000000{i}");
+            Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(hold)).StatusCode);
+        }
+
+        var shrink = await client.PutAsJsonAsync($"/classes/{cls!.Id}", new { name, totalSeats = 1 });
+        Assert.Equal(HttpStatusCode.Conflict, shrink.StatusCode);
+
+        var put = await client.PutAsJsonAsync($"/classes/{cls.Id}", new { name = $"{name} v2", totalSeats = 4 });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        var updated = await client.GetFromJsonAsync<ClassDto>($"/classes/{cls.Id}");
+        Assert.Equal($"{name} v2", updated!.Name);
+        Assert.Equal(4, updated.TotalSeats);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/classes/{cls.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/classes/{cls.Id}")).StatusCode);
+    }
+
     private sealed record CreateDto(string Id);
     private sealed record HoldDto(string HoldId);
     private sealed record ClassDto(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats);

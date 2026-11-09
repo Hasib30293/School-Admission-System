@@ -34,6 +34,16 @@ Run the test command while PostgreSQL is available (for example after `docker co
 
 The backend test suite includes API contract tests, ownership/idempotency tests, expiry behavior, and a concurrent hold test proving that capacity is never exceeded.
 
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm test
+```
+
+The Vitest + React Testing Library suite covers class listing and seat counts, the disabled apply button when a class is full, expired holds showing `EXPIRED` with a disabled pay button, the unreachable-server message, and the admin create-class flow.
+
 ## API
 
 All student-specific requests use the `X-Student-Id` header. The required routes are implemented exactly as specified:
@@ -46,6 +56,8 @@ All student-specific requests use the `X-Student-Id` header. The required routes
 - `POST /holds/{holdId}/confirm`
 - `DELETE /holds/{holdId}`
 - `GET /me/holds`
+
+Admin convenience endpoints (not part of the required contract): `PUT /classes/{classId}` updates a class name/seat count (seat count cannot drop below the seats currently held or confirmed), and `DELETE /classes/{classId}` deletes a class and its applications. They are used by the "Create Class (School Admin)" tab.
 
 ## Design notes
 

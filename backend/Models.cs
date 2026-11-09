@@ -23,6 +23,7 @@ public sealed class AdmissionHold
 }
 
 public sealed record CreateClassRequest(string? Name, int TotalSeats);
+public sealed record UpdateClassRequest(string? Name, int TotalSeats);
 public sealed record ClassResponse(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats);
 public sealed record HoldResponse(string HoldId, string ClassId, string? ClassName, string? StudentId, string Status, DateTimeOffset? ExpiresAt);
 public sealed record ConfirmResponse(string HoldId, string Status);

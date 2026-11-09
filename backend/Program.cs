@@ -58,6 +58,32 @@ app.MapGet("/classes/{classId:guid}", async (Guid classId, AdmissionDbContext db
     return result is null ? Results.NotFound(new { message = "Class not found." }) : Results.Ok(result);
 });
 
+app.MapPut("/classes/{classId:guid}", async (Guid classId, [FromBody] UpdateClassRequest request, AdmissionDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Length > 200 || request.TotalSeats <= 0)
+        return Results.BadRequest(new { message = "Name is required and totalSeats must be greater than zero." });
+    await using var tx = await db.Database.BeginTransactionAsync();
+    var cls = await db.Classes.FromSqlInterpolated($"SELECT * FROM classes WHERE \"Id\" = {classId} FOR UPDATE").SingleOrDefaultAsync();
+    if (cls is null) return Results.NotFound(new { message = "Class not found." });
+    await ExpireDue(db, classId);
+    var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed));
+    if (request.TotalSeats < used) return Results.Conflict(new { message = $"Total seats cannot be lower than the {used} seats already held or confirmed." });
+    cls.Name = request.Name.Trim();
+    cls.TotalSeats = request.TotalSeats;
+    await db.SaveChangesAsync();
+    await tx.CommitAsync();
+    return Results.Ok(await BuildClassResponse(db, classId));
+});
+
+app.MapDelete("/classes/{classId:guid}", async (Guid classId, AdmissionDbContext db) =>
+{
+    var cls = await db.Classes.SingleOrDefaultAsync(x => x.Id == classId);
+    if (cls is null) return Results.NotFound(new { message = "Class not found." });
+    db.Classes.Remove(cls);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
 app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest request, AdmissionDbContext db, IConfiguration config) =>
 {
     var studentId = StudentId(request);

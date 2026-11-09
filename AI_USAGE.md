@@ -1,6 +1,6 @@
 # AI usage
 
-This project was developed with OpenAI Codex assistance. AI was used for scaffolding, API/UI implementation, Docker configuration, and test design.
+This project was developed with OpenAI Codex assistance. AI was used for scaffolding, API/UI implementation, Docker configuration, and test design. Big Pickle from OpenCode was also used for follow-up implementation, compliance review, admin edit/delete features, the local development launcher, UI translation, and the frontend Vitest + React Testing Library tests.
 
 The generated code was then reviewed and run manually. Issues found and fixed during that review:
 
