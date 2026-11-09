@@ -21,6 +21,7 @@ export function App() {
   const [classes, setClasses] = useState<ClassItem[]>([]); const [holds, setHolds] = useState<Hold[]>([]);
   const [tab, setTab] = useState<'classes' | 'applications' | 'admin'>('classes');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ClassItem | null>(null);
   const [adminView, setAdminView] = useState<'create' | 'list'>('create');
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
@@ -40,18 +41,19 @@ export function App() {
   const [className, setClassName] = useState(''); const [shift, setShift] = useState('Morning'); const [seats, setSeats] = useState(''); const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [now, setNow] = useState(() => Date.now());
   const validStudentId = /^\d{17}$/.test(studentId);
   const saveStudent = (value: string) => { setStudentId(value); localStorage.setItem('studentId', value); };
-  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); if (next !== 'admin') setAdminMenuOpen(false); };
+  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); if (next !== 'admin') setAdminMenuOpen(false); };
   const refresh = useCallback(async () => { try { setClasses(await api<ClassItem[]>('/classes')); if (/^\d{17}$/.test(studentId)) setHolds(await api<Hold[]>('/me/holds', {}, studentId)); else setHolds([]); setError(prev => prev === NETWORK_ERROR || prev === SERVER_ERROR ? '' : prev); } catch (e) { setError((e as Error).message); } }, [studentId]);
   useEffect(() => { refresh(); const timer = setInterval(refresh, 3000); return () => clearInterval(timer); }, [refresh]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 10000); return () => clearTimeout(timer); }, [notice]);
+  useEffect(() => { if (!highlightId) return; const timer = setTimeout(() => setHighlightId(null), 4000); return () => clearTimeout(timer); }, [highlightId]);
   const remaining = (h: Hold) => Math.max(0, Math.ceil((new Date(h.expiresAt).getTime() - now) / 1000));
   const statusOf = (h: Hold) => h.status === 'HELD' && remaining(h) === 0 ? 'EXPIRED' : h.status;
   const myActiveClassIds = new Set(holds.filter(h => h.status === 'HELD' || h.status === 'CONFIRMED').map(h => h.classId));
   const parseFullName = (full: string) => { const m = full.match(/^(.*?)\s*-\s*(Morning|Day)(?:\s+Shift)?$/i); return m ? { className: m[1].trim(), shift: m[2].toLowerCase() === 'day' ? 'Day' : 'Morning' } : { className: full, shift: 'Morning' }; };
   const startEdit = (c: ClassItem) => { const parsed = parseFullName(c.name); setEditingId(c.id); setClassName(parsed.className); setShift(parsed.shift); setSeats(String(c.totalSeats)); setAdminView('create'); setError(''); setNotice(''); };
   const cancelEdit = () => { setEditingId(null); setClassName(''); setShift('Morning'); setSeats(''); };
-  const saveClass = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); const fullName = `${className.trim()} - ${shift} Shift`; try { if (editingId) { await api(`/classes/${editingId}`, { method: 'PUT', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setNotice('Class updated.'); } else { await api('/classes', { method: 'POST', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setNotice('Class created.'); } setClassName(''); setShift('Morning'); setSeats(''); setEditingId(null); refresh(); } catch (e) { setError((e as Error).message); } };
+  const saveClass = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); const fullName = `${className.trim()} - ${shift} Shift`; try { if (editingId) { const id = editingId; await api(`/classes/${id}`, { method: 'PUT', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setHighlightId(id); setAdminView('list'); switchTab('admin'); setNotice('Class updated.'); } else { await api('/classes', { method: 'POST', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setNotice('Class created.'); } setClassName(''); setShift('Morning'); setSeats(''); setEditingId(null); refresh(); } catch (e) { setError((e as Error).message); } };
   const askDelete = (c: ClassItem) => { setError(''); setNotice(''); setPendingDelete(c); };
   const deleteClass = async () => { if (!pendingDelete) return; const c = pendingDelete; setPendingDelete(null); setError(''); setNotice(''); try { await api(`/classes/${c.id}`, { method: 'DELETE' }); setNotice('Class deleted.'); if (editingId === c.id) cancelEdit(); refresh(); } catch (e) { setError((e as Error).message); } };
   const openEnroll = (c: ClassItem) => { setEnrollClass(c); setEnrollForm({ reg: studentId, name: '', fatherName: '', motherName: '', contact: '' }); setEnrollError(''); };
@@ -136,7 +138,7 @@ export function App() {
           </form>
         </> : <>
           <h3>Classes</h3>
-          <div className="admin-scroll"><table><thead><tr><th>Class name</th><th>Total seats</th><th>Available seats</th><th>Actions</th></tr></thead><tbody>{classes.length ? classes.map(c => <tr key={c.id}><th scope="row"><button type="button" className="class-name-button" onClick={() => openStudents(c)}>{c.name}</button></th><td>{c.totalSeats}</td><td><span className={`available-pill ${c.availableSeats ? '' : 'empty-pill'}`}>{c.availableSeats}</span></td><td><div className="manage-actions admin-actions"><button type="button" className="secondary" onClick={() => startEdit(c)}>Edit</button><button type="button" className="danger" onClick={() => askDelete(c)}>Delete</button></div></td></tr>) : <tr><td colSpan={4} className="empty">No classes yet.</td></tr>}</tbody></table></div>
+          <div className="admin-scroll"><table><thead><tr><th>Class name</th><th>Total seats</th><th>Available seats</th><th>Actions</th></tr></thead><tbody>{classes.length ? classes.map(c => <tr key={c.id} className={c.id === highlightId ? 'row-highlight' : undefined}><th scope="row"><button type="button" className="class-name-button" onClick={() => openStudents(c)}>{c.name}</button></th><td>{c.totalSeats}</td><td><span className={`available-pill ${c.availableSeats ? '' : 'empty-pill'}`}>{c.availableSeats}</span></td><td><div className="manage-actions admin-actions"><button type="button" className="secondary" onClick={() => startEdit(c)}>Edit</button><button type="button" className="danger" onClick={() => askDelete(c)}>Delete</button></div></td></tr>) : <tr><td colSpan={4} className="empty">No classes yet.</td></tr>}</tbody></table></div>
         </>}
       </div>}
     </main>
