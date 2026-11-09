@@ -5,6 +5,9 @@ services:
       POSTGRES_DB: school_admission
       POSTGRES_USER: admission
       POSTGRES_PASSWORD: admission
+    ports:
+      # Exposed so `dotnet test` can run from the host against the same database.
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -32,7 +35,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_URL: http://localhost:8080
+        # Leave empty to call the API through this container's nginx proxy.
+        # Set VITE_API_URL to a full URL to call a backend elsewhere.
+        VITE_API_URL: ${VITE_API_URL:-}
     ports:
       - "3000:80"
     depends_on:

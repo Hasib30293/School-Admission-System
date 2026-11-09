@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Xunit;
 
 namespace SchoolAdmission.Tests;
 
@@ -42,10 +43,35 @@ public sealed class AdmissionApiTests : IClassFixture<WebApplicationFactory<Prog
         var responses = await Task.WhenAll(requests);
         Assert.Equal(3, responses.Count(x => x.StatusCode == HttpStatusCode.Created));
         Assert.All(responses.Where(x => x.StatusCode != HttpStatusCode.Created), x => Assert.Equal(HttpStatusCode.Conflict, x.StatusCode));
-        var result = await client.GetFromJsonAsync<ClassDto>($"/classes/{cls.Id}");
+        var result = await client.GetFromJsonAsync<ClassDto>($"/classes/{cls!.Id}");
         Assert.True(result!.HeldSeats + result.ConfirmedSeats <= result.TotalSeats);
     }
 
+    [Fact]
+    public async Task ConfirmIsIdempotentAndOwnershipIsEnforced()
+    {
+        var classResponse = await client.PostAsJsonAsync("/classes", new { name = $"Confirm {Guid.NewGuid()}", totalSeats = 2 });
+        var cls = await classResponse.Content.ReadFromJsonAsync<CreateDto>();
+        using var createHold = new HttpRequestMessage(HttpMethod.Post, $"/classes/{cls!.Id}/holds");
+        createHold.Headers.Add("X-Student-Id", "30000000000000001");
+        var hold = await (await client.SendAsync(createHold)).Content.ReadFromJsonAsync<HoldDto>();
+
+        using var otherConfirm = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold!.HoldId}/confirm");
+        otherConfirm.Headers.Add("X-Student-Id", "30000000000000002");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(otherConfirm)).StatusCode);
+
+        using var ownConfirm1 = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold.HoldId}/confirm");
+        ownConfirm1.Headers.Add("X-Student-Id", "30000000000000001");
+        using var ownConfirm2 = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold.HoldId}/confirm");
+        ownConfirm2.Headers.Add("X-Student-Id", "30000000000000001");
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(ownConfirm1)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(ownConfirm2)).StatusCode);
+
+        var after = await client.GetFromJsonAsync<ClassDto>($"/classes/{cls!.Id}");
+        Assert.Equal(1, after!.ConfirmedSeats);
+    }
+
     private sealed record CreateDto(string Id);
+    private sealed record HoldDto(string HoldId);
     private sealed record ClassDto(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats);
 }

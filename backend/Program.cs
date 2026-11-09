@@ -21,11 +21,22 @@ using (var scope = app.Services.CreateScope())
         try { db.Database.EnsureCreated(); break; }
         catch when (retries++ < 20) { Thread.Sleep(1000); }
     }
+    db.Database.ExecuteSqlRaw("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'IX_classes_Name' AND indexdef ILIKE '%UNIQUE%') THEN
+                DROP INDEX "IX_classes_Name";
+                CREATE INDEX "IX_classes_Name" ON classes ("Name");
+            END IF;
+        END $$;
+        """);
 }
 
 app.UseCors();
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapPost("/classes", async ([FromBody] CreateClassRequest request, AdmissionDbContext db) =>
 {
@@ -33,8 +44,7 @@ app.MapPost("/classes", async ([FromBody] CreateClassRequest request, AdmissionD
         return Results.BadRequest(new { message = "Name is required and totalSeats must be greater than zero." });
     var entity = new ClassOffering { Name = request.Name.Trim(), TotalSeats = request.TotalSeats };
     db.Classes.Add(entity);
-    try { await db.SaveChangesAsync(); }
-    catch (DbUpdateException) { return Results.Conflict(new { message = "A class with this name already exists." }); }
+    await db.SaveChangesAsync();
     return Results.Created($"/classes/{entity.Id}", new { id = entity.Id.ToString(), name = entity.Name, totalSeats = entity.TotalSeats });
 });
 
@@ -81,7 +91,7 @@ app.MapPost("/holds/{holdId:guid}/confirm", async (Guid holdId, HttpRequest requ
     await ExpireDue(db);
     var hold = await db.Holds.SingleOrDefaultAsync(x => x.Id == holdId);
     if (hold is null) return Results.NotFound(new { message = "Application not found." });
-    if (hold.StudentId != studentId) return Results.Forbid();
+    if (hold.StudentId != studentId) return Results.Json(new { message = "You can only manage your own application." }, statusCode: StatusCodes.Status403Forbidden);
     if (hold.Status == HoldStatus.Confirmed) return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED" });
     if (hold.Status != HoldStatus.Held || hold.ExpiresAt <= DateTimeOffset.UtcNow) return Results.Conflict(new { message = "This hold has expired or is no longer active." });
     hold.Status = HoldStatus.Confirmed;
@@ -93,9 +103,10 @@ app.MapDelete("/holds/{holdId:guid}", async (Guid holdId, HttpRequest request, A
 {
     var studentId = StudentId(request);
     if (studentId is null) return Results.BadRequest(new { message = "X-Student-Id must contain exactly 17 digits." });
+    await ExpireDue(db);
     var hold = await db.Holds.SingleOrDefaultAsync(x => x.Id == holdId);
     if (hold is null) return Results.NotFound(new { message = "Application not found." });
-    if (hold.StudentId != studentId) return Results.Forbid();
+    if (hold.StudentId != studentId) return Results.Json(new { message = "You can only manage your own application." }, statusCode: StatusCodes.Status403Forbidden);
     if (hold.Status is HoldStatus.Held) { hold.Status = HoldStatus.Cancelled; await db.SaveChangesAsync(); }
     return Results.NoContent();
 });

@@ -14,7 +14,7 @@ public sealed class AdmissionDbContext(DbContextOptions<AdmissionDbContext> opti
             e.ToTable("classes");
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            e.HasIndex(x => x.Name).IsUnique();
+            e.HasIndex(x => x.Name);
         });
         modelBuilder.Entity<AdmissionHold>(e =>
         {

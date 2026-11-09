@@ -1,7 +1,10 @@
 frontend/node_modules/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
 bin/
 obj/
 .vs/
 *.user
 *.suo
+Asst_Software_Engineer_Project_Assignment.pdf
