@@ -62,8 +62,10 @@ public sealed class AdmissionApiTests : IClassFixture<WebApplicationFactory<Prog
 
         using var ownConfirm1 = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold.HoldId}/confirm");
         ownConfirm1.Headers.Add("X-Student-Id", "30000000000000001");
+        ownConfirm1.Content = JsonContent.Create(new { paymentMethod = "Banking", transactionId = "TX-300-1" });
         using var ownConfirm2 = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold.HoldId}/confirm");
         ownConfirm2.Headers.Add("X-Student-Id", "30000000000000001");
+        ownConfirm2.Content = JsonContent.Create(new { paymentMethod = "Banking", transactionId = "TX-300-1" });
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(ownConfirm1)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(ownConfirm2)).StatusCode);
 
@@ -98,7 +100,34 @@ public sealed class AdmissionApiTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/classes/{cls.Id}")).StatusCode);
     }
 
+    [Fact]
+    public async Task AdminCanReadEnrolledStudentsWithTheirInformation()
+    {
+        var classResponse = await client.PostAsJsonAsync("/classes", new { name = $"Students {Guid.NewGuid()}", totalSeats = 2 });
+        var cls = await classResponse.Content.ReadFromJsonAsync<CreateDto>();
+        using var createHold = new HttpRequestMessage(HttpMethod.Post, $"/classes/{cls!.Id}/holds");
+        createHold.Headers.Add("X-Student-Id", "50000000000000001");
+        createHold.Content = JsonContent.Create(new { studentName = "Ayesha Rahman", fatherName = "Abdul Rahman", motherName = "Fatima Begum", contactInfo = "01712345678" });
+        var hold = await (await client.SendAsync(createHold)).Content.ReadFromJsonAsync<HoldDto>();
+
+        using var confirm = new HttpRequestMessage(HttpMethod.Post, $"/holds/{hold!.HoldId}/confirm");
+        confirm.Headers.Add("X-Student-Id", "50000000000000001");
+        confirm.Content = JsonContent.Create(new { paymentMethod = "Mobile banking", transactionId = "TX-MOBILE-1" });
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(confirm)).StatusCode);
+
+        var students = await client.GetFromJsonAsync<List<StudentDto>>($"/classes/{cls.Id}/holds");
+        var student = Assert.Single(students!);
+        Assert.Equal("Ayesha Rahman", student.StudentName);
+        Assert.Equal("Abdul Rahman", student.FatherName);
+        Assert.Equal("Fatima Begum", student.MotherName);
+        Assert.Equal("01712345678", student.ContactInfo);
+        Assert.Equal("CONFIRMED", student.Status);
+        Assert.Equal("Mobile banking", student.PaymentMethod);
+        Assert.Equal("TX-MOBILE-1", student.TransactionId);
+    }
+
     private sealed record CreateDto(string Id);
     private sealed record HoldDto(string HoldId);
+    private sealed record StudentDto(string StudentId, string? StudentName, string? FatherName, string? MotherName, string? ContactInfo, string Status, string? PaymentMethod, string? TransactionId);
     private sealed record ClassDto(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats);
 }

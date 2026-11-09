@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,15 @@ using (var scope = app.Services.CreateScope())
                 CREATE INDEX "IX_classes_Name" ON classes ("Name");
             END IF;
         END $$;
+        """);
+    db.Database.ExecuteSqlRaw("""
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "StudentName" varchar(200);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "FatherName" varchar(200);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "MotherName" varchar(200);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ContactInfo" varchar(100);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "PaymentMethod" varchar(30);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "TransactionId" varchar(100);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ConfirmedAt" timestamptz;
         """);
 }
 
@@ -88,6 +98,7 @@ app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest re
 {
     var studentId = StudentId(request);
     if (studentId is null) return Results.BadRequest(new { message = "X-Student-Id must contain exactly 17 digits." });
+    var details = await ReadBody<CreateHoldRequest>(request);
     var duration = Math.Clamp(config.GetValue("HOLD_DURATION_SECONDS", 600), 1, 86400);
     await using var tx = await db.Database.BeginTransactionAsync();
     var cls = await db.Classes.FromSqlInterpolated($"SELECT * FROM classes WHERE \"Id\" = {classId} FOR UPDATE").SingleOrDefaultAsync();
@@ -97,10 +108,32 @@ app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest re
     if (existing) return Results.Conflict(new { message = "This student already has an active application for this class." });
     var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed));
     if (used >= cls.TotalSeats) return Results.Conflict(new { message = "No seats are currently available." });
-    var hold = new AdmissionHold { ClassOfferingId = classId, StudentId = studentId, ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(duration) };
+    var hold = new AdmissionHold
+    {
+        ClassOfferingId = classId,
+        StudentId = studentId,
+        StudentName = Clean(details?.StudentName, 200),
+        FatherName = Clean(details?.FatherName, 200),
+        MotherName = Clean(details?.MotherName, 200),
+        ContactInfo = Clean(details?.ContactInfo, 100),
+        ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(duration)
+    };
     db.Holds.Add(hold);
     await db.SaveChangesAsync(); await tx.CommitAsync();
     return Results.Created($"/holds/{hold.Id}", new { holdId = hold.Id.ToString(), classId = classId.ToString(), studentId, status = "HELD", expiresAt = hold.ExpiresAt });
+});
+
+app.MapGet("/classes/{classId:guid}/holds", async (Guid classId, AdmissionDbContext db) =>
+{
+    if (!await db.Classes.AnyAsync(x => x.Id == classId)) return Results.NotFound(new { message = "Class not found." });
+    await ExpireDue(db, classId);
+    var holds = await db.Holds.AsNoTracking()
+        .Where(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed))
+        .OrderByDescending(x => x.CreatedAt)
+        .ToListAsync();
+    return Results.Ok(holds.Select(x => new EnrolledStudentResponse(
+        x.Id.ToString(), x.StudentId, x.StudentName, x.FatherName, x.MotherName, x.ContactInfo,
+        x.Status.ToString().ToUpperInvariant(), x.PaymentMethod, x.TransactionId, x.CreatedAt, x.ExpiresAt, x.ConfirmedAt)));
 });
 
 app.MapGet("/holds/{holdId:guid}", async (Guid holdId, AdmissionDbContext db) =>
@@ -120,9 +153,18 @@ app.MapPost("/holds/{holdId:guid}/confirm", async (Guid holdId, HttpRequest requ
     if (hold.StudentId != studentId) return Results.Json(new { message = "You can only manage your own application." }, statusCode: StatusCodes.Status403Forbidden);
     if (hold.Status == HoldStatus.Confirmed) return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED" });
     if (hold.Status != HoldStatus.Held || hold.ExpiresAt <= DateTimeOffset.UtcNow) return Results.Conflict(new { message = "This hold has expired or is no longer active." });
+    var payment = await ReadBody<ConfirmPaymentRequest>(request);
+    var transactionId = payment?.TransactionId?.Trim();
+    if (string.IsNullOrWhiteSpace(transactionId)) return Results.BadRequest(new { message = "Transaction ID is required to confirm the payment." });
+    if (transactionId.Length > 100) return Results.BadRequest(new { message = "Transaction ID cannot be longer than 100 characters." });
+    var paymentMethod = payment?.PaymentMethod?.Trim();
+    if (paymentMethod is not ("Banking" or "Mobile banking" or "Offline")) return Results.BadRequest(new { message = "Select a valid payment method." });
     hold.Status = HoldStatus.Confirmed;
+    hold.PaymentMethod = paymentMethod;
+    hold.TransactionId = transactionId;
+    hold.ConfirmedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
-    return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED" });
+    return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED", paymentMethod, transactionId });
 });
 
 app.MapDelete("/holds/{holdId:guid}", async (Guid holdId, HttpRequest request, AdmissionDbContext db) =>
@@ -149,6 +191,18 @@ app.MapGet("/me/holds", async (HttpRequest request, AdmissionDbContext db) =>
 app.Run();
 
 static string? StudentId(HttpRequest request) => request.Headers.TryGetValue("X-Student-Id", out var value) && Regex.IsMatch(value.ToString(), "^\\d{17}$") ? value.ToString() : null;
+static string? Clean(string? value, int maxLength)
+{
+    if (string.IsNullOrWhiteSpace(value)) return null;
+    var trimmed = value.Trim();
+    return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+}
+static async Task<T?> ReadBody<T>(HttpRequest request)
+{
+    if (request.ContentLength is null or 0) return default;
+    try { return await JsonSerializer.DeserializeAsync<T>(request.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)); }
+    catch { return default; }
+}
 static async Task ExpireDue(AdmissionDbContext db, Guid? classId = null)
 {
     var query = db.Holds.Where(x => x.Status == HoldStatus.Held && x.ExpiresAt <= DateTimeOffset.UtcNow);

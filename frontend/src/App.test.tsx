@@ -26,7 +26,7 @@ describe('App', () => {
     expect(screen.getByText('15')).toBeInTheDocument();
     expect(screen.getByText('80')).toBeInTheDocument();
     expect(screen.getByText('25')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /apply/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /enroll/i })).toBeEnabled();
   });
 
   it('disables the apply button when no seats are available', async () => {
@@ -35,6 +35,56 @@ describe('App', () => {
 
     const button = await screen.findByRole('button', { name: /no seats available/i });
     expect(button).toBeDisabled();
+  });
+
+  it('opens the enrollment form and holds the seat without confirming', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method || 'GET';
+      calls.push(`${method} ${url}`);
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.endsWith('/me/holds')) return json([]);
+      if (url.endsWith('/holds') && method === 'POST') return json({ holdId: 'h1' }, 201);
+      return json({});
+    }));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /enroll/i }));
+    expect(screen.getByRole('heading', { name: /enroll in class 6/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^registration number$/i), { target: { value: '20152691234567890' } });
+    fireEvent.change(screen.getByLabelText(/^student name$/i), { target: { value: 'Ayesha Rahman' } });
+    fireEvent.change(screen.getByLabelText(/father's name/i), { target: { value: 'Abdul Rahman' } });
+    fireEvent.change(screen.getByLabelText(/mother's name/i), { target: { value: 'Fatima Begum' } });
+    fireEvent.change(screen.getByLabelText(/contact information/i), { target: { value: '01712345678' } });
+    fireEvent.click(screen.getByRole('button', { name: /enroll & pay/i }));
+
+    expect(await screen.findByText(/seat held/i)).toBeInTheDocument();
+    expect(calls.some(c => c.includes('/confirm'))).toBe(false);
+  });
+
+  it('confirms a held seat only after a transaction ID is provided', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method || 'GET';
+      calls.push(`${method} ${url}`);
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.endsWith('/me/holds')) return json([{ holdId: 'h1', classId: 'c1', className: 'Class 6 - Morning Shift', status: 'HELD', expiresAt: new Date(Date.now() + 120000).toISOString() }]);
+      return json({});
+    }));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /my applications/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /pay admission fee/i }));
+    expect(screen.getByRole('heading', { name: /pay admission fee/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/mobile banking/i));
+    fireEvent.change(screen.getByLabelText(/transaction id/i), { target: { value: 'TRX-2026-000123' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
+
+    expect(await screen.findByText(/payment confirmed via mobile banking/i)).toBeInTheDocument();
+    expect(calls.some(c => c.includes('/confirm'))).toBe(true);
   });
 
   it('shows EXPIRED with a disabled pay button for an expired hold, without reload', async () => {
@@ -49,6 +99,26 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('link', { name: /my applications/i }));
     expect(await screen.findByText('EXPIRED')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /pay admission fee/i })).toBeDisabled();
+  });
+
+  it('shows enrolled students with their information when an admin clicks a class name', async () => {
+    stubFetch(url => {
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.endsWith('/classes/c1/holds')) return json([{ holdId: 'h1', studentId: '20152691234567890', studentName: 'Ayesha Rahman', fatherName: 'Abdul Rahman', motherName: 'Fatima Begum', contactInfo: '01712345678', status: 'CONFIRMED', paymentMethod: 'Mobile banking', transactionId: 'TX-MOBILE-1', createdAt: new Date().toISOString(), expiresAt: new Date().toISOString() }]);
+      return json([]);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /admin/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Class 6 - Morning Shift' }));
+
+    expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
+    expect(screen.getByText('20152691234567890')).toBeInTheDocument();
+    expect(screen.getByText('Abdul Rahman')).toBeInTheDocument();
+    expect(screen.getByText('Fatima Begum')).toBeInTheDocument();
+    expect(screen.getByText('01712345678')).toBeInTheDocument();
+    expect(screen.getByText('TX-MOBILE-1')).toBeInTheDocument();
   });
 
   it('shows a user-friendly message when the server is unreachable', async () => {
@@ -73,9 +143,11 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('link', { name: /create class/i }));
-    fireEvent.change(screen.getByLabelText(/class and shift name/i), { target: { value: sampleClass.name } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create classes' }));
+    fireEvent.change(screen.getByLabelText(/class name/i), { target: { value: 'Class 6' } });
+    fireEvent.change(screen.getByLabelText(/shift name/i), { target: { value: 'Morning' } });
     fireEvent.change(screen.getByLabelText(/total seats/i), { target: { value: '120' } });
-    fireEvent.click(screen.getByRole('button', { name: /create class/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create class' }));
 
     expect(await screen.findByText('Class created.')).toBeInTheDocument();
     expect(calls.some(c => c.method === 'POST' && c.body?.includes('Class 6 - Morning Shift'))).toBe(true);
