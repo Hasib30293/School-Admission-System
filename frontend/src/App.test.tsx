@@ -21,7 +21,8 @@ describe('App', () => {
     stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
     render(<App />);
 
-    expect(await screen.findByText('Class 6 - Morning Shift')).toBeInTheDocument();
+    expect(await screen.findByText('Class 6')).toBeInTheDocument();
+    expect(screen.getByText('Morning')).toBeInTheDocument();
     expect(screen.getByText('120')).toBeInTheDocument();
     expect(screen.getByText('15')).toBeInTheDocument();
     expect(screen.getByText('80')).toBeInTheDocument();
@@ -150,7 +151,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Class 6 - Morning Shift' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Class 6' }));
 
     expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
     expect(screen.getByText('20152691234567890')).toBeInTheDocument();

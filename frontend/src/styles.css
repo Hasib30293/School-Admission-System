@@ -56,8 +56,8 @@ body { margin: 0; min-width: 320px; font-size: 15px; background: #f4f7fb; }
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 26px 22px;
+  gap: 18px;
+  padding: 20px 18px;
   background: #ffffff;
   border-right: 1px solid var(--line);
 }
@@ -223,17 +223,17 @@ main {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: 32px clamp(20px, 3vw, 46px) 46px;
+  gap: 14px;
+  padding: 22px clamp(20px, 3vw, 46px) 32px;
 }
 
 .intro-card {
-  min-height: 96px;
+  min-height: 84px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 1px 4px #2441660b;
-  padding: 22px 24px;
+  padding: 18px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -267,7 +267,7 @@ main {
 table { width: 100%; border-collapse: collapse; min-width: 820px; }
 thead { background: #f8fafc; }
 th, td {
-  height: 64px;
+  height: 52px;
   padding: 0 20px;
   border-bottom: 1px solid #edf1f5;
   text-align: center;
@@ -278,6 +278,27 @@ th, td {
 thead th { color: #526985; font-weight: 800; font-size: 13px; letter-spacing: .02em; }
 tbody th { font-weight: 700; text-align: left; color: #1e375a; font-size: 15px; }
 tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+
+.classes-table { table-layout: fixed; min-width: 900px; }
+.admin-classes-table { table-layout: fixed; min-width: 680px; }
+.classes-table .col-class, .admin-classes-table .col-class { width: 24%; }
+.classes-table .col-shift, .admin-classes-table .col-shift { width: 12%; }
+.classes-table .col-seats { width: 12%; }
+.classes-table .col-action { width: 16%; }
+.admin-classes-table .col-class { width: 32%; }
+.admin-classes-table .col-shift { width: 16%; }
+.admin-classes-table .col-seats { width: 16%; }
+.admin-classes-table .col-action { width: 20%; }
+.shift-pill {
+  display: inline-block;
+  min-width: 76px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #eaf1ff;
+  color: #1d4ed8;
+  font-size: 12.5px;
+  font-weight: 700;
+}
 .held-number { color: #f18a00; }
 .confirmed-number { color: #13aa82; }
 .available-pill {
@@ -308,7 +329,7 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
   border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 1px 4px #2441660b;
-  padding: 28px 30px;
+  padding: 22px 24px;
 }
 .tab-card { max-width: none; margin: 0; }
 .eyebrow { font-size: 12px; letter-spacing: .14em; font-weight: 800; color: #3472e6; margin: 0; }
@@ -321,7 +342,7 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 16px;
-  padding: 18px 0;
+  padding: 14px 0;
   border-bottom: 1px solid #edf1f5;
 }
 .application:last-child { border-bottom: 0; }
@@ -335,7 +356,7 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
 .badge.cancelled { background: #ffe1e3; color: #a43b45; }
 .badge.rejected { background: #ffe1e3; color: #a43b45; }
 
-label { display: block; color: #526984; font-size: 13px; font-weight: 700; margin: 16px 0; }
+label { display: block; color: #526984; font-size: 13px; font-weight: 700; margin: 12px 0; }
 input, select {
   display: block;
   width: 100%;
@@ -377,7 +398,7 @@ button:disabled { cursor: not-allowed; }
   justify-content: space-between;
   gap: 18px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 .admin-head h2 { margin: 6px 0 0; }
 #admin form {
@@ -403,7 +424,7 @@ button:disabled { cursor: not-allowed; }
 @keyframes row-highlight { 0%, 55% { background: #ecfdf5; } 100% { background: transparent; } }
 .admin-scroll tr.row-highlight { animation: row-highlight 4s ease-out; }
 
-.class-manage { margin-top: 28px; border-top: 1px solid #e6edf4; padding-top: 22px; }
+.class-manage { margin-top: 20px; border-top: 1px solid #e6edf4; padding-top: 16px; }
 .class-manage h3 { margin: 0 0 8px; font-size: 17px; color: #172e4d; }
 .manage-row {
   display: flex;
@@ -577,7 +598,7 @@ button:disabled { cursor: not-allowed; }
   .nav-dropdown { flex-direction: row; margin: 0; padding: 0; border-left: 0; }
   .nav-dropdown button { padding: 8px 10px; font-size: 12px; }
   .sidebar-note { display: none; }
-  main { padding: 22px 16px 36px; gap: 18px; }
+  main { padding: 16px 16px 26px; gap: 12px; }
   .intro-card { align-items: flex-start; flex-direction: column; padding: 18px; }
   .info-note { width: 100%; white-space: normal; }
   .table-card, .content-card { flex: none; }
