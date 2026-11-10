@@ -7,6 +7,7 @@ const proxy = {
   '/holds': backend,
   '/admin': backend,
   '/me': backend,
+  '/applications': backend,
   '/health': backend,
   '/swagger': backend,
 };

@@ -677,6 +677,18 @@ button:disabled { cursor: not-allowed; }
 @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-pop { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
 
+.search-form { display: flex; gap: 10px; max-width: 760px; margin: 24px 0; }
+.search-form input { flex: 1; min-width: 0; }
+.application-detail { border: 1px solid var(--line); border-radius: 16px; padding: 22px; background: #fff; box-shadow: 0 8px 24px rgba(15, 61, 110, .06); }
+.application-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.application-detail h3 { margin: 5px 0 0; font-size: 22px; color: var(--ink); }
+.detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+.detail-grid div { padding: 14px; background: #f8fbff; border: 1px solid #e6eef8; border-radius: 12px; }
+.detail-grid span { display: block; color: #6b7c93; font-size: 12px; margin-bottom: 6px; }
+.detail-grid strong { color: var(--ink); font-size: 14px; }
+.badge.waiting { background: #fff7ed; color: #c2410c; }
+.classes-table .badge { white-space: nowrap; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
   .topbar { position: static; gap: 12px; padding: 10px 14px; min-height: 0; }
@@ -714,4 +726,7 @@ button:disabled { cursor: not-allowed; }
   .enroll-grid, .pay-methods { grid-template-columns: 1fr; }
   #admin form { grid-template-columns: 1fr; gap: 16px; }
   .manage-row { align-items: flex-start; flex-direction: column; }
+  .search-form { flex-direction: column; }
+  .detail-grid { grid-template-columns: 1fr 1fr; }
 }
+@media (max-width: 560px) { .detail-grid { grid-template-columns: 1fr; } .application-detail-head { flex-direction: column; } }

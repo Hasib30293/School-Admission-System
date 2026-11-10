@@ -33,6 +33,10 @@ using (var scope = app.Services.CreateScope())
         """);
     db.Database.ExecuteSqlRaw("""
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "StudentName" varchar(200);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ApplicationReference" varchar(40);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "DateOfBirth" varchar(30);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "Gender" varchar(30);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "Address" varchar(500);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "FatherName" varchar(200);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "MotherName" varchar(200);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ContactInfo" varchar(100);
@@ -110,9 +114,10 @@ app.MapDelete("/classes/{classId:guid}", async (Guid classId, AdmissionDbContext
 
 app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest request, AdmissionDbContext db, IConfiguration config) =>
 {
-    var studentId = StudentId(request);
-    if (studentId is null) return Results.BadRequest(new { message = "X-Student-Id must contain exactly 17 digits." });
     var details = await ReadBody<CreateHoldRequest>(request);
+    var studentId = details?.BirthRegistrationNumber?.Trim();
+    if (studentId is null || !Regex.IsMatch(studentId, "^\\d{17}$")) studentId = StudentId(request);
+    if (studentId is null) return Results.BadRequest(new { message = "Birth registration number must contain exactly 17 digits." });
     var contactInfo = Clean(details?.ContactInfo, 100);
     if (contactInfo is not null && !Regex.IsMatch(contactInfo, "^[0-9]{11}$"))
         return Results.BadRequest(new { message = "Contact number must be exactly 11 digits." });
@@ -125,19 +130,36 @@ app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest re
     if (existing) return Results.Conflict(new { message = "This student already has an active application for this class." });
     var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Pending || x.Status == HoldStatus.Confirmed));
     if (used >= cls.TotalSeats) return Results.Conflict(new { message = "No seats are currently available." });
+    if (details?.BirthRegistrationNumber is not null && (string.IsNullOrWhiteSpace(details.StudentName) || string.IsNullOrWhiteSpace(contactInfo)))
+        return Results.BadRequest(new { message = "Student name and contact number are required." });
     var hold = new AdmissionHold
     {
         ClassOfferingId = classId,
         StudentId = studentId,
+        ApplicationReference = $"APP-{DateTimeOffset.UtcNow:yyyyMMdd}-{Random.Shared.Next(100000, 999999)}",
         StudentName = Clean(details?.StudentName, 200),
+        DateOfBirth = Clean(details?.DateOfBirth, 30),
+        Gender = Clean(details?.Gender, 30),
         FatherName = Clean(details?.FatherName, 200),
         MotherName = Clean(details?.MotherName, 200),
         ContactInfo = contactInfo,
+        Address = Clean(details?.Address, 500),
         ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(duration)
     };
     db.Holds.Add(hold);
     await db.SaveChangesAsync(); await tx.CommitAsync();
-    return Results.Created($"/holds/{hold.Id}", new { holdId = hold.Id.ToString(), classId = classId.ToString(), studentId, status = "HELD", expiresAt = hold.ExpiresAt });
+    return Results.Created($"/holds/{hold.Id}", new { holdId = hold.Id.ToString(), applicationReference = hold.ApplicationReference, classId = classId.ToString(), studentId, status = "HELD", expiresAt = hold.ExpiresAt });
+});
+
+app.MapGet("/applications/search", async (string? birthRegistrationNumber, AdmissionDbContext db) =>
+{
+    if (birthRegistrationNumber is null || !Regex.IsMatch(birthRegistrationNumber, "^\\d{17}$"))
+        return Results.BadRequest(new { message = "Birth registration number must contain exactly 17 digits." });
+    await ExpireDue(db);
+    var applications = await db.Holds.AsNoTracking().Include(x => x.ClassOffering)
+        .Where(x => x.StudentId == birthRegistrationNumber)
+        .OrderByDescending(x => x.CreatedAt).ToListAsync();
+    return Results.Ok(applications.Select(ToApplicationResponse));
 });
 
 app.MapGet("/classes/{classId:guid}/holds", async (Guid classId, AdmissionDbContext db) =>
@@ -302,5 +324,15 @@ static object ToHoldResponse(AdmissionHold h, bool includeStudent) => new
     confirmedAt = h.ConfirmedAt,
     reviewNote = h.ReviewNote
 };
+static ApplicationResponse ToApplicationResponse(AdmissionHold h)
+{
+    var className = h.ClassOffering?.Name ?? "";
+    var match = Regex.Match(className, "^(.*?)\\s*-\\s*(Morning|Day|Evening)(?:\\s+Shift)?$", RegexOptions.IgnoreCase);
+    var displayClass = match.Success ? match.Groups[1].Value.Trim() : className;
+    var shift = match.Success ? match.Groups[2].Value : "Morning";
+    var appStatus = h.Status switch { HoldStatus.Held => "Waiting for Payment", HoldStatus.Pending => "Payment Under Review", HoldStatus.Confirmed => "Admitted", HoldStatus.Rejected => "Payment Rejected", HoldStatus.Expired => "Expired", _ => h.Status.ToString() };
+    var paymentStatus = h.Status is HoldStatus.Pending or HoldStatus.Confirmed ? "Paid" : "Unpaid";
+    return new ApplicationResponse(h.Id.ToString(), h.ApplicationReference, h.ClassOfferingId.ToString(), displayClass, shift, h.StudentName ?? "", h.StudentId, h.DateOfBirth, h.Gender, h.FatherName, h.MotherName, h.ContactInfo, h.Address, h.CreatedAt, appStatus, paymentStatus, h.ExpiresAt, h.PaymentMethod, h.TransactionId, h.ReviewNote);
+}
 
 public partial class Program { }

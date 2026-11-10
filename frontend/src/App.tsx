@@ -8,7 +8,8 @@ const SIDEBAR_MAX = 520;
 const SIDEBAR_DEFAULT = 310;
 const clampSidebar = (width: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width));
 export type ClassItem = { id: string; name: string; totalSeats: number; heldSeats: number; confirmedSeats: number; availableSeats: number; pendingSeats?: number };
-export type Hold = { holdId: string; classId: string; className?: string; status: string; expiresAt: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; reviewNote?: string };
+export type Application = { holdId: string; applicationReference: string; classId: string; className: string; shift: string; studentName: string; birthRegistrationNumber: string; dateOfBirth?: string; gender?: string; fatherName?: string; motherName?: string; contactNumber?: string; address?: string; createdAt: string; applicationStatus: string; paymentStatus: string; seatHoldExpiry?: string; paymentMethod?: string; transactionId?: string; reviewNote?: string };
+export type Hold = { holdId: string; classId: string; className?: string; studentId?: string; status: string; expiresAt: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; reviewNote?: string };
 export type EnrolledStudent = { holdId: string; studentId: string; studentName?: string; fatherName?: string; motherName?: string; contactInfo?: string; status: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; reviewNote?: string; createdAt: string; expiresAt: string; confirmedAt?: string };
 export type PendingPayment = { holdId: string; classId: string; className: string; studentId: string; studentName?: string; fatherName?: string; motherName?: string; contactInfo?: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; createdAt: string };
 
@@ -31,8 +32,10 @@ function CheckIcon({ size = 16 }: { size?: number }) {
 }
 
 export function App() {
-  const [studentId, setStudentId] = useState(() => localStorage.getItem('studentId') || '');
-  const [classes, setClasses] = useState<ClassItem[]>([]); const [holds, setHolds] = useState<Hold[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [application, setApplication] = useState<Application | null>(null);
+  const [applicationSearch, setApplicationSearch] = useState('');
+  const [searchError, setSearchError] = useState('');
   const [tab, setTab] = useState<'classes' | 'applications' | 'admin'>('classes');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -40,7 +43,7 @@ export function App() {
   const [adminView, setAdminView] = useState<'create' | 'list' | 'payments'>('create');
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [enrollClass, setEnrollClass] = useState<ClassItem | null>(null);
-  const [enrollForm, setEnrollForm] = useState({ reg: '', name: '', fatherName: '', motherName: '', contact: '' });
+  const [enrollForm, setEnrollForm] = useState({ reg: '', name: '', contact: '' });
   const [enrollError, setEnrollError] = useState('');
   const [enrolling, setEnrolling] = useState(false);
   const [payHold, setPayHold] = useState<Hold | null>(null);
@@ -63,50 +66,35 @@ export function App() {
   const moveResize = (e: React.PointerEvent<HTMLDivElement>) => { const drag = resizeRef.current; if (drag) setSidebarWidth(clampSidebar(drag.startWidth + e.clientX - drag.startX)); };
   const endResize = (e: React.PointerEvent<HTMLDivElement>) => { if (!resizeRef.current) return; resizeRef.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); document.body.classList.remove('resizing'); };
   const resizeByKey = (e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setSidebarWidth(w => clampSidebar(w + (e.key === 'ArrowRight' ? 16 : -16))); } };
-  const validStudentId = /^\d{17}$/.test(studentId);
-  const saveStudent = (value: string) => { setStudentId(value); localStorage.setItem('studentId', value); };
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement | null>(null);
-  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); setAdminMenuOpen(false); if (next === 'admin') setProfileOpen(false); };
-  const refresh = useCallback(async () => { try { setClasses(await api<ClassItem[]>('/classes')); if (/^\d{17}$/.test(studentId)) setHolds(await api<Hold[]>('/me/holds', {}, studentId)); else setHolds([]); setError(prev => prev === NETWORK_ERROR || prev === SERVER_ERROR ? '' : prev); } catch (e) { setError((e as Error).message); } }, [studentId]);
+  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); setAdminMenuOpen(false); };
+  const refresh = useCallback(async () => { try { setClasses(await api<ClassItem[]>('/classes')); setError(prev => prev === NETWORK_ERROR || prev === SERVER_ERROR ? '' : prev); } catch (e) { setError((e as Error).message); } }, []);
   useEffect(() => { refresh(); const timer = setInterval(refresh, 3000); return () => clearInterval(timer); }, [refresh]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 10000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { if (!highlightId) return; const timer = setTimeout(() => setHighlightId(null), 4000); return () => clearTimeout(timer); }, [highlightId]);
   useEffect(() => { localStorage.setItem('sidebarWidth', String(sidebarWidth)); }, [sidebarWidth]);
-  useEffect(() => {
-    if (!profileOpen) return;
-    const onPointerDown = (e: MouseEvent) => { if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false); };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setProfileOpen(false); };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => { document.removeEventListener('mousedown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
-  }, [profileOpen]);
-  const remaining = (h: Hold) => Math.max(0, Math.ceil((new Date(h.expiresAt).getTime() - now) / 1000));
-  const statusOf = (h: Hold) => h.status === 'HELD' && remaining(h) === 0 ? 'EXPIRED' : h.status;
-  const myActiveClassIds = new Set(holds.filter(h => h.status === 'HELD' || h.status === 'PENDING' || h.status === 'CONFIRMED').map(h => h.classId));
-  const parseFullName = (full: string) => { const m = full.match(/^(.*?)\s*-\s*(Morning|Day)(?:\s+Shift)?$/i); return m ? { className: m[1].trim(), shift: m[2].toLowerCase() === 'day' ? 'Day' : 'Morning' } : { className: full, shift: 'Morning' }; };
+  const parseFullName = (full: string) => { const m = full.match(/^(.*?)\s*-\s*(Morning|Day|Evening)(?:\s+Shift)?$/i); return m ? { className: m[1].trim(), shift: m[2][0].toUpperCase() + m[2].slice(1).toLowerCase() } : { className: full, shift: 'Morning' }; };
   const startEdit = (c: ClassItem) => { const parsed = parseFullName(c.name); setEditingId(c.id); setClassName(parsed.className); setShift(parsed.shift); setSeats(String(c.totalSeats)); setAdminView('create'); setError(''); setNotice(''); };
   const cancelEdit = () => { setEditingId(null); setClassName(''); setShift('Morning'); setSeats(''); };
   const saveClass = async (e: React.FormEvent) => { e.preventDefault(); setError(''); setNotice(''); const fullName = `${className.trim()} - ${shift} Shift`; try { if (editingId) { const id = editingId; await api(`/classes/${id}`, { method: 'PUT', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setHighlightId(id); setAdminView('list'); switchTab('admin'); setNotice('Class updated.'); } else { await api('/classes', { method: 'POST', body: JSON.stringify({ name: fullName, totalSeats: Number(seats) }) }); setNotice('Class created.'); } setClassName(''); setShift('Morning'); setSeats(''); setEditingId(null); refresh(); } catch (e) { setError((e as Error).message); } };
   const askDelete = (c: ClassItem) => { setError(''); setNotice(''); setPendingDelete(c); };
   const deleteClass = async () => { if (!pendingDelete) return; const c = pendingDelete; setPendingDelete(null); setError(''); setNotice(''); try { await api(`/classes/${c.id}`, { method: 'DELETE' }); setNotice('Class deleted.'); if (editingId === c.id) cancelEdit(); refresh(); } catch (e) { setError((e as Error).message); } };
-  const openEnroll = (c: ClassItem) => { setEnrollClass(c); setEnrollForm({ reg: studentId, name: '', fatherName: '', motherName: '', contact: '' }); setEnrollError(''); };
+  const openEnroll = (c: ClassItem) => { setEnrollClass(c); setEnrollForm({ reg: '', name: '', contact: '' }); setEnrollError(''); };
   const closeEnroll = () => { if (!enrolling) { setEnrollClass(null); setEnrollError(''); } };
   const submitEnroll = async (e: React.FormEvent) => {
     e.preventDefault(); setEnrollError('');
     const reg = enrollForm.reg.trim();
     if (!/^\d{17}$/.test(reg)) return setEnrollError('Registration number must be exactly 17 digits.');
-    if (!enrollForm.name.trim() || !enrollForm.fatherName.trim() || !enrollForm.motherName.trim() || !enrollForm.contact.trim()) return setEnrollError('Please fill in all the student details.');
+    if (!enrollForm.name.trim() || !enrollForm.contact.trim()) return setEnrollError('Please fill in all required application fields.');
     if (!/^\d{11}$/.test(enrollForm.contact.trim())) return setEnrollError('Contact number must be exactly 11 digits.');
     if (!enrollClass) return;
     setEnrolling(true);
     try {
-      await api(`/classes/${enrollClass.id}/holds`, { method: 'POST', body: JSON.stringify({ studentName: enrollForm.name.trim(), fatherName: enrollForm.fatherName.trim(), motherName: enrollForm.motherName.trim(), contactInfo: enrollForm.contact.trim() }) }, reg);
-      saveStudent(reg);
+      const created = await api<{ applicationReference: string }>(`/classes/${enrollClass.id}/holds`, { method: 'POST', body: JSON.stringify({ birthRegistrationNumber: reg, studentName: enrollForm.name.trim(), contactInfo: enrollForm.contact.trim() }) });
       switchTab('applications');
-      setNotice(`Seat held for ${enrollClass.name}. Submit your payment details before the timer runs out.`);
-      setEnrollClass(null); setEnrollForm({ reg: '', name: '', fatherName: '', motherName: '', contact: '' });
+      setNotice(`Application submitted successfully. Your reference number is ${created.applicationReference}.`);
+      setApplicationSearch(reg); setEnrollClass(null); setEnrollForm({ reg: '', name: '', contact: '' });
+      await searchApplication(reg);
       refresh();
     } catch (err) { setEnrollError((err as Error).message); }
     finally { setEnrolling(false); }
@@ -120,14 +108,14 @@ export function App() {
     if (!tx) return setPayError('Enter the transaction ID to submit the payment.');
     setPaying(true);
     try {
-      await api(`/holds/${payHold.holdId}/confirm`, { method: 'POST', body: JSON.stringify({ paymentMethod, transactionId: tx }) }, studentId);
+      await api(`/holds/${payHold.holdId}/confirm`, { method: 'POST', body: JSON.stringify({ paymentMethod, transactionId: tx }) }, payHold.studentId);
       setNotice(`Payment details submitted via ${paymentMethod}. An admin will verify transaction ${tx} and approve the seat.`);
       setPayHold(null); setTransactionId('');
       refresh();
     } catch (err) { setPayError((err as Error).message); }
     finally { setPaying(false); }
   };
-  const cancel = async (id: string) => { setError(''); setNotice(''); try { await api(`/holds/${id}`, { method: 'DELETE' }, studentId); setNotice('Application cancelled.'); refresh(); } catch (e) { setError((e as Error).message); } };
+  const searchApplication = async (value = applicationSearch) => { const reg = value.replace(/\D/g, ''); setSearchError(''); setApplication(null); if (!/^\d{17}$/.test(reg)) { setSearchError('Enter exactly 17 digits.'); return; } try { const results = await api<Application[]>(`/applications/search?birthRegistrationNumber=${reg}`); if (!results.length) setSearchError('No application found for this birth registration number.'); else setApplication(results[0]); } catch (e) { setSearchError((e as Error).message); } };
   const openStudents = async (c: ClassItem) => {
     setStudentsClass(c); setStudents([]); setStudentsError(''); setStudentsLoading(true);
     try { setStudents(await api<EnrolledStudent[]>(`/classes/${c.id}/holds`)); }
@@ -162,29 +150,12 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><div className="brand-mark" aria-hidden="true">🎓</div><div><h1>Online School Admission Portal</h1><p>Simple and fast admission process</p></div></div>
-      {tab !== 'admin' && <div className="profile" ref={profileRef}>
-        <button type="button" className={`profile-button ${validStudentId ? 'is-verified' : ''}`} aria-haspopup="dialog" aria-expanded={profileOpen} aria-label="Student account" title="Student account" onClick={() => setProfileOpen(open => !open)}><UserIcon /></button>
-        {profileOpen && <div className="profile-menu" role="dialog" aria-label="Student account">
-          <div className="profile-head">
-            <span className="profile-avatar" aria-hidden="true"><UserIcon size={18} /></span>
-            <div className="profile-identity"><strong>Student account</strong><span className={validStudentId ? 'verified' : 'unverified'}>{validStudentId ? 'Verified' : 'Not verified'}</span></div>
-          </div>
-          <div className="profile-body">
-            <span className="profile-label">Birth registration number</span>
-            <div className="profile-number">
-              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" aria-invalid={!validStudentId} aria-describedby={validStudentId ? undefined : 'profile-reg-help'} />
-              {validStudentId && <span className="profile-number-ok" aria-hidden="true"><CheckIcon size={12} /></span>}
-            </div>
-            {!validStudentId && <p id="profile-reg-help" className={`profile-hint ${studentId ? 'warn' : ''}`}>Birth registration number must be exactly 17 digits{studentId ? ` (${studentId.length}/17)` : ''}.</p>}
-          </div>
-        </div>}
-      </div>}
     </header>
     <div className="app-body" style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}>
     <aside className="sidebar">
       <nav className="nav-tabs" aria-label="Primary navigation">
         <a className={tab === 'classes' ? 'active' : ''} href="#classes" onClick={e => { e.preventDefault(); switchTab('classes'); }}><span className="nav-icon" aria-hidden="true">☷</span><span className="nav-text"><span className="nav-title">Class list</span><span className="nav-sub">Browse available shifts</span></span></a>
-        <a className={tab === 'applications' ? 'active' : ''} href="#applications" onClick={e => { e.preventDefault(); switchTab('applications'); }}><span className="nav-icon" aria-hidden="true">▣</span><span className="nav-text"><span className="nav-title">My applications</span><span className="nav-sub">Track your seat holds</span></span>{holds.length > 0 && <b>{holds.length}</b>}</a>
+        <a className={tab === 'applications' ? 'active' : ''} href="#applications" onClick={e => { e.preventDefault(); switchTab('applications'); }}><span className="nav-icon" aria-hidden="true">▣</span><span className="nav-text"><span className="nav-title">Application</span><span className="nav-sub">Check your admission status</span></span></a>
         <div className={`nav-group ${adminMenuOpen ? 'open' : ''}`}>
           <a className={tab === 'admin' ? 'active' : ''} href="#admin" aria-expanded={adminMenuOpen} onClick={e => { e.preventDefault(); setAdminMenuOpen(open => !open); }}><span className="nav-icon" aria-hidden="true">⚙</span><span className="nav-text"><span className="nav-title">Admin</span><span className="nav-sub">{adminView === 'create' ? 'Add New Class' : adminView === 'list' ? 'Manage Classes' : 'Verify payments'}</span></span>{pendingPayments.length > 0 && <b>{pendingPayments.length}</b>}<span className="nav-caret" aria-hidden="true">▾</span></a>
           {adminMenuOpen && <div className="nav-dropdown"><button type="button" className={adminView === 'create' ? 'active' : ''} onClick={() => { setAdminView('create'); switchTab('admin'); setAdminMenuOpen(false); }}>Add New Class</button><button type="button" className={adminView === 'list' ? 'active' : ''} onClick={() => { setAdminView('list'); switchTab('admin'); setAdminMenuOpen(false); }}>Manage Classes</button><button type="button" className={adminView === 'payments' ? 'active' : ''} onClick={() => { setAdminView('payments'); switchTab('admin'); setAdminMenuOpen(false); }}>Payments{pendingPayments.length > 0 ? ` (${pendingPayments.length})` : ''}</button></div>}
@@ -196,10 +167,10 @@ export function App() {
     <div className="main-area">
     <main className={tab === 'admin' ? 'main-flush' : undefined}>{error && <div className="alert error">{error}</div>}{notice && <div className="alert success">{notice}</div>}
       {tab === 'classes' && <>
-        <section className="intro-card" id="classes"><div><h2>List of Class</h2><p>Each shift is set up and displayed as a separate class</p></div><div className="info-note">● <span>After applying, you have limited time to pay the admission fee before the seat is released</span></div></section>
-        <section className="table-card" aria-label="Available classes"><div className="table-scroll"><table className="classes-table"><colgroup><col className="col-class" /><col className="col-shift" /><col className="col-seats" /><col className="col-seats" /><col className="col-seats" /><col className="col-seats" /><col className="col-action" /></colgroup><thead><tr><th>Class name</th><th>Shift</th><th>Total seats</th><th>On hold</th><th>Confirmed seats</th><th>Available seats</th><th>Action</th></tr></thead><tbody>{classes.length ? classes.map(c => { const applied = myActiveClassIds.has(c.id); const parts = parseFullName(c.name); return <tr key={c.id}><th scope="row">{parts.className}</th><td><span className="shift-pill">{parts.shift}</span></td><td>{c.totalSeats}</td><td className="held-number">{c.heldSeats}</td><td className="confirmed-number">{c.confirmedSeats}</td><td><span className={`available-pill ${c.availableSeats ? '' : 'empty-pill'}`}>{c.availableSeats}</span></td><td><button className="apply-button" disabled={!c.availableSeats || applied} onClick={() => openEnroll(c)}>{applied ? 'Already enrolled' : c.availableSeats ? '➤ Enroll' : 'No seats available'}</button></td></tr>; }) : <tr><td colSpan={7} className="empty">No classes have been created yet.</td></tr>}</tbody></table></div></section>
+        <section className="intro-card" id="classes"><div><h2>Class List</h2><p>Choose a class and shift to start your admission application.</p></div><div className="info-note">● <span>After applying, pay the admission fee before the seat hold expires</span></div></section>
+        <section className="table-card" aria-label="Available classes"><div className="table-scroll"><table className="classes-table"><thead><tr><th>Class name</th><th>Shift</th><th>Total seats</th><th>Available seats</th><th>Admission status</th><th>Action</th></tr></thead><tbody>{classes.length ? classes.map(c => { const parts = parseFullName(c.name); const status = c.availableSeats > 0 ? 'Open' : 'Full'; return <tr key={c.id}><th scope="row">{parts.className}</th><td><span className="shift-pill">{parts.shift}</span></td><td>{c.totalSeats}</td><td><span className={`available-pill ${c.availableSeats ? '' : 'empty-pill'}`}>{c.availableSeats}</span></td><td><span className={`badge ${status.toLowerCase()}`}>{status}</span></td><td><button className="apply-button" disabled={!c.availableSeats} onClick={() => openEnroll(c)}>{c.availableSeats ? 'Apply now' : 'Full'}</button></td></tr>; }) : <tr><td colSpan={6} className="empty">No classes have been created yet.</td></tr>}</tbody></table></div></section>
       </>}
-      {tab === 'applications' && <div className="content-card tab-card" id="applications"><p className="eyebrow">STUDENT VIEW</p><h2>My applications</h2>{holds.length === 0 ? <p className="empty">Your applications will appear here.</p> : <div className="applications">{holds.map(h => { const status = statusOf(h); const detail = status === 'HELD' ? `${remaining(h)} seconds remaining` : status === 'PENDING' ? `Payment submitted${h.transactionId ? ` (${h.transactionId})` : ''} — waiting for admin approval` : status === 'REJECTED' ? `Payment rejected${h.reviewNote ? `: ${h.reviewNote}` : ''}. You can apply again.` : `Status: ${status}`; return <div className="application" key={h.holdId}><div><strong>{h.className || h.classId}</strong><p>{detail}</p></div><span className={`badge ${status.toLowerCase()}`}>{status}</span>{(status === 'HELD' || status === 'EXPIRED') && <div className="actions"><button disabled={status !== 'HELD'} onClick={() => openPay(h)}>Pay admission fee</button>{status === 'HELD' && <button className="secondary" onClick={() => cancel(h.holdId)}>Cancel</button>}</div>}</div>; })}</div>}</div>}
+      {tab === 'applications' && <div className="content-card tab-card" id="applications"><p className="eyebrow">STUDENT VIEW</p><h2>Application</h2><p>Enter your 17-digit Student Birth Registration Number to check your admission application.</p><form className="search-form" onSubmit={e => { e.preventDefault(); searchApplication(); }}><input aria-label="Birth registration number" value={applicationSearch} onChange={e => setApplicationSearch(e.target.value.replace(/\D/g, '').slice(0, 17))} placeholder="Enter 17-digit Birth Registration Number" inputMode="numeric" maxLength={17} /><button type="submit">Search</button></form>{searchError && <div className="alert error">{searchError}</div>}{application && <div className="application-detail"><div className="application-detail-head"><div><span className="eyebrow">APPLICATION {application.applicationReference}</span><h3>{application.studentName}</h3></div><span className="badge waiting">{application.applicationStatus}</span></div><div className="detail-grid"><div><span>Birth registration number</span><strong>{application.birthRegistrationNumber.slice(0, 5)}••••••••••••</strong></div><div><span>Applied class</span><strong>{application.className}</strong></div><div><span>Shift</span><strong>{application.shift}</strong></div><div><span>Submitted</span><strong>{new Date(application.createdAt).toLocaleString()}</strong></div><div><span>Payment status</span><strong>{application.paymentStatus}</strong></div><div><span>Seat hold expiry</span><strong>{application.seatHoldExpiry ? new Date(application.seatHoldExpiry).toLocaleString() : '—'}</strong></div></div>{application.paymentStatus === 'Unpaid' && <button onClick={() => openPay({ holdId: application.holdId, studentId: application.birthRegistrationNumber, classId: application.classId, className: `${application.className} - ${application.shift} Shift`, status: 'HELD', expiresAt: application.seatHoldExpiry || '' })}>Pay Admission Fee</button>}</div>}</div>}
       {tab === 'admin' && <div className="content-card tab-card" id="admin">
         <div className="admin-head">
           <div><p className="eyebrow">SCHOOL ADMIN</p><h2>{adminView === 'create' ? 'Add New Class' : adminView === 'list' ? 'Manage Classes' : 'Verify payments'}</h2></div>
@@ -209,7 +180,7 @@ export function App() {
           <p className="muted">Set a separate seat capacity for each class and shift.</p>
           <form onSubmit={saveClass}>
             <label>Class name<input required value={className} onChange={e => setClassName(e.target.value)} placeholder="e.g., Class 6" /></label>
-            <label>Shift name<select value={shift} onChange={e => setShift(e.target.value)}><option value="Morning">Morning</option><option value="Day">Day</option></select></label>
+            <label>Shift name<select value={shift} onChange={e => setShift(e.target.value)}><option value="Morning">Morning</option><option value="Day">Day</option><option value="Evening">Evening</option></select></label>
             <label>Total seats<input required min="1" type="number" value={seats} onChange={e => setSeats(e.target.value)} placeholder="e.g., 120" /></label>
             <div className="form-actions"><button>{editingId ? 'Save changes' : 'Create class'}</button>{editingId && <button type="button" className="secondary" onClick={cancelEdit}>Cancel</button>}</div>
           </form>
@@ -234,16 +205,12 @@ export function App() {
         <p>Enter the student details to hold a seat, then submit the payment details for admin verification.</p>
         {enrollError && <div className="alert error enroll-error">{enrollError}</div>}
         <form className="enroll-form" onSubmit={submitEnroll}>
-          <label>Registration number<input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="e.g., 20121234567890123" maxLength={17} inputMode="numeric" required /></label>
+          <label>Student birth registration number<input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="Enter exactly 17 digits" maxLength={17} inputMode="numeric" required /></label>
           <label>Student name<input value={enrollForm.name} onChange={e => setEnrollForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Ayesha Rahman" required /></label>
-          <div className="enroll-grid">
-            <label>Father's name<input value={enrollForm.fatherName} onChange={e => setEnrollForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="e.g., Abdul Rahman" required /></label>
-            <label>Mother's name<input value={enrollForm.motherName} onChange={e => setEnrollForm(f => ({ ...f, motherName: e.target.value }))} placeholder="e.g., Fatima Begum" required /></label>
-          </div>
           <label>Contact information<input value={enrollForm.contact} onChange={e => setEnrollForm(f => ({ ...f, contact: e.target.value.replace(/\D/g, '').slice(0, 11) }))} placeholder="e.g., 01712345678" maxLength={11} inputMode="numeric" pattern="[0-9]{11}" title="Contact number must be exactly 11 digits" required /></label>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={closeEnroll} disabled={enrolling}>Cancel</button>
-            <button type="submit" disabled={enrolling}>{enrolling ? 'Processing payment...' : 'Enroll & pay'}</button>
+            <button type="submit" disabled={enrolling}>{enrolling ? 'Submitting...' : 'Submit application'}</button>
           </div>
         </form>
       </div>
