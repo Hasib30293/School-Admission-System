@@ -332,6 +332,17 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
   padding: 22px 24px;
 }
 .tab-card { max-width: none; margin: 0; }
+
+/* Full-bleed admin page: card meets the top bar and sidebar, fills the rest */
+main.main-flush { padding: 0; gap: 0; }
+main.main-flush > .content-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 100%;
+  padding: 24px clamp(20px, 3vw, 46px) 36px;
+}
+main.main-flush > .alert { margin: 14px clamp(20px, 3vw, 46px) 0; }
 .eyebrow { font-size: 12px; letter-spacing: .14em; font-weight: 800; color: #3472e6; margin: 0; }
 .content-card h2 { margin: 6px 0 16px; font-size: 27px; }
 .muted, .application p { color: #7c8b9e; font-size: 13px; margin: 0; }
