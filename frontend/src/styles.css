@@ -591,7 +591,7 @@ button:disabled { cursor: not-allowed; }
   text-align: left;
   cursor: pointer;
 }
-.class-name-button:hover { text-decoration: underline; }
+.class-name-button:hover { background: transparent; color: #0b8764; text-decoration: underline; }
 .students-modal {
   width: min(960px, 100%);
   max-height: calc(100vh - 40px);
