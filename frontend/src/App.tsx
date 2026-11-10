@@ -23,6 +23,10 @@ async function api<T>(path: string, options: RequestInit = {}, studentId?: strin
   catch { throw new Error('The server returned an unexpected response. Please reload the page and try again.'); }
 }
 
+function UserIcon({ size = 20 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2Zm0 1.7c-4.1 0-7.4 2.3-7.4 5.2v1.1h14.8v-1.1c0-2.9-3.3-5.2-7.4-5.2Z" /></svg>;
+}
+
 export function App() {
   const [studentId, setStudentId] = useState(() => localStorage.getItem('studentId') || '');
   const [classes, setClasses] = useState<ClassItem[]>([]); const [holds, setHolds] = useState<Hold[]>([]);
@@ -58,13 +62,39 @@ export function App() {
   const resizeByKey = (e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setSidebarWidth(w => clampSidebar(w + (e.key === 'ArrowRight' ? 16 : -16))); } };
   const validStudentId = /^\d{17}$/.test(studentId);
   const saveStudent = (value: string) => { setStudentId(value); localStorage.setItem('studentId', value); };
-  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); if (next !== 'admin') setAdminMenuOpen(false); };
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+  const copyRegistration = async () => {
+    if (!studentId) return;
+    let copiedOk = false;
+    try { await navigator.clipboard.writeText(studentId); copiedOk = true; }
+    catch {
+      try {
+        const field = document.createElement('textarea');
+        field.value = studentId; field.setAttribute('readonly', ''); field.style.position = 'fixed'; field.style.opacity = '0';
+        document.body.appendChild(field); field.select(); document.execCommand('copy'); field.remove();
+        copiedOk = true;
+      } catch { copiedOk = false; }
+    }
+    if (copiedOk) setCopied(true);
+  };
+  const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); setAdminMenuOpen(false); if (next === 'admin') setProfileOpen(false); };
   const refresh = useCallback(async () => { try { setClasses(await api<ClassItem[]>('/classes')); if (/^\d{17}$/.test(studentId)) setHolds(await api<Hold[]>('/me/holds', {}, studentId)); else setHolds([]); setError(prev => prev === NETWORK_ERROR || prev === SERVER_ERROR ? '' : prev); } catch (e) { setError((e as Error).message); } }, [studentId]);
   useEffect(() => { refresh(); const timer = setInterval(refresh, 3000); return () => clearInterval(timer); }, [refresh]);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 10000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { if (!highlightId) return; const timer = setTimeout(() => setHighlightId(null), 4000); return () => clearTimeout(timer); }, [highlightId]);
   useEffect(() => { localStorage.setItem('sidebarWidth', String(sidebarWidth)); }, [sidebarWidth]);
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onPointerDown = (e: MouseEvent) => { if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false); };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setProfileOpen(false); };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('mousedown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
+  }, [profileOpen]);
+  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
   const remaining = (h: Hold) => Math.max(0, Math.ceil((new Date(h.expiresAt).getTime() - now) / 1000));
   const statusOf = (h: Hold) => h.status === 'HELD' && remaining(h) === 0 ? 'EXPIRED' : h.status;
   const myActiveClassIds = new Set(holds.filter(h => h.status === 'HELD' || h.status === 'PENDING' || h.status === 'CONFIRMED').map(h => h.classId));
@@ -145,7 +175,23 @@ export function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><div className="brand-mark" aria-hidden="true">🎓</div><div><h1>Online School Admission Portal</h1><p>Simple and fast admission process</p></div></div>
-      <label className="student-field">Student birth registration number:<div className="student-input-wrap"><span aria-hidden="true">▣</span><input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="201212..." maxLength={17} inputMode="numeric" /><span className={validStudentId ? 'verified' : 'unverified'}>{validStudentId ? '✓ Verified' : '17 digits'}</span></div></label>
+      {tab !== 'admin' && <div className="profile" ref={profileRef}>
+        <button type="button" className={`profile-button ${validStudentId ? 'is-verified' : ''}`} aria-haspopup="dialog" aria-expanded={profileOpen} aria-label="Student account" title="Student account" onClick={() => setProfileOpen(open => !open)}><UserIcon /></button>
+        {profileOpen && <div className="profile-menu" role="dialog" aria-label="Student account">
+          <div className="profile-head">
+            <span className="profile-avatar" aria-hidden="true"><UserIcon size={18} /></span>
+            <div className="profile-identity"><strong>Student account</strong><span className={validStudentId ? 'verified' : 'unverified'}>{validStudentId ? 'Verified' : 'Not verified'}</span></div>
+          </div>
+          <div className="profile-body">
+            <span className="profile-label">Birth registration number</span>
+            <div className="profile-reg-row">
+              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" />
+              <button type="button" className="copy-button" onClick={copyRegistration} disabled={!studentId}>{copied ? 'Copied' : 'Copy'}</button>
+            </div>
+            <p className="profile-hint">Used to load your applications and seat holds.</p>
+          </div>
+        </div>}
+      </div>}
     </header>
     <div className="app-body" style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}>
     <aside className="sidebar">

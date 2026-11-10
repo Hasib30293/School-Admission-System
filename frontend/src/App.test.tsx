@@ -41,6 +41,34 @@ describe('App', () => {
     expect(localStorage.getItem('sidebarWidth')).toBe('326');
   });
 
+  it('shows student details in the profile menu and hides them on admin pages', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /student account/i }));
+    expect(screen.getByLabelText(/birth registration number/i)).toHaveValue('20152691234567890');
+    expect(screen.getByText('Verified')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('link', { name: /admin/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
+    expect(screen.queryByRole('button', { name: /student account/i })).not.toBeInTheDocument();
+  });
+
+  it('copies the registration number from the profile menu', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /student account/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    expect(writeText).toHaveBeenCalledWith('20152691234567890');
+  });
+
   it('disables the apply button when no seats are available', async () => {
     stubFetch(url => json(url.endsWith('/classes') ? [{ ...sampleClass, availableSeats: 0 }] : []));
     render(<App />);
