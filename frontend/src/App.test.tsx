@@ -52,7 +52,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /copy registration number/i })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Class' }));
     expect(screen.queryByRole('button', { name: /student account/i })).not.toBeInTheDocument();
   });
 
@@ -205,7 +205,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Class' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Class 6' }));
 
     expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
@@ -238,7 +238,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('link', { name: /create class/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create classes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create class' }));
     fireEvent.change(screen.getByLabelText(/class name/i), { target: { value: 'Class 6' } });
     fireEvent.change(screen.getByLabelText(/shift name/i), { target: { value: 'Morning' } });
     fireEvent.change(screen.getByLabelText(/total seats/i), { target: { value: '120' } });
