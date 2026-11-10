@@ -52,7 +52,7 @@ describe('App', () => {
     expect(screen.queryByText(/must be exactly 17 digits/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Class' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Classes' }));
     expect(screen.queryByRole('button', { name: /student account/i })).not.toBeInTheDocument();
   });
 
@@ -192,7 +192,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Class' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Classes' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Class 6' }));
 
     expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
@@ -224,8 +224,8 @@ describe('App', () => {
     }));
     render(<App />);
 
-    fireEvent.click(screen.getByRole('link', { name: /create class/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Create class' }));
+    fireEvent.click(screen.getByRole('link', { name: /add new class/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add New Class' }));
     fireEvent.change(screen.getByLabelText(/class name/i), { target: { value: 'Class 6' } });
     fireEvent.change(screen.getByLabelText(/shift name/i), { target: { value: 'Morning' } });
     fireEvent.change(screen.getByLabelText(/total seats/i), { target: { value: '120' } });
