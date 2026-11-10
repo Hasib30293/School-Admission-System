@@ -30,6 +30,17 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /enroll/i })).toBeEnabled();
   });
 
+  it('resizes the sidebar with the keyboard and remembers the width', async () => {
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    const separator = screen.getByRole('separator', { name: /resize sidebar/i });
+    expect(separator).toHaveAttribute('aria-valuenow', '310');
+    fireEvent.keyDown(separator, { key: 'ArrowRight' });
+    expect(separator).toHaveAttribute('aria-valuenow', '326');
+    expect(localStorage.getItem('sidebarWidth')).toBe('326');
+  });
+
   it('disables the apply button when no seats are available', async () => {
     stubFetch(url => json(url.endsWith('/classes') ? [{ ...sampleClass, availableSeats: 0 }] : []));
     render(<App />);

@@ -42,11 +42,42 @@ body { margin: 0; min-width: 320px; font-size: 15px; background: #f4f7fb; }
 .topbar .student-field { width: min(460px, 100%); flex-shrink: 0; }
 
 .app-body {
+  position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: 310px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w, 310px) minmax(0, 1fr);
   min-height: 0;
 }
+
+/* Drag handle between the sidebar and the main content */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--sidebar-w, 310px);
+  z-index: 15;
+  width: 12px;
+  margin-left: -6px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: transparent;
+  transition: background .15s ease;
+}
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.resizing .sidebar-resizer::after { background: var(--blue); }
+.sidebar-resizer:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
 
 /* ---------- Sidebar ---------- */
 .sidebar {
@@ -589,6 +620,7 @@ button:disabled { cursor: not-allowed; }
   }
   .topbar .student-field { width: 100%; }
   .app-body { grid-template-columns: 1fr; }
+  .sidebar-resizer { display: none; }
   .main-area { min-height: 0; }
   .sidebar {
     position: static;

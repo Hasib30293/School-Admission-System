@@ -1,8 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const NETWORK_ERROR = 'Could not reach the server. Please check that it is running and try again.';
 const SERVER_ERROR = 'The server is temporarily unavailable. Please try again in a moment.';
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 520;
+const SIDEBAR_DEFAULT = 310;
+const clampSidebar = (width: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width));
 export type ClassItem = { id: string; name: string; totalSeats: number; heldSeats: number; confirmedSeats: number; availableSeats: number; pendingSeats?: number };
 export type Hold = { holdId: string; classId: string; className?: string; status: string; expiresAt: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; reviewNote?: string };
 export type EnrolledStudent = { holdId: string; studentId: string; studentName?: string; fatherName?: string; motherName?: string; contactInfo?: string; status: string; paymentMethod?: string; transactionId?: string; paymentSubmittedAt?: string; reviewNote?: string; createdAt: string; expiresAt: string; confirmedAt?: string };
@@ -46,6 +50,12 @@ export function App() {
   const [paymentsError, setPaymentsError] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [className, setClassName] = useState(''); const [shift, setShift] = useState('Morning'); const [seats, setSeats] = useState(''); const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [now, setNow] = useState(() => Date.now());
+  const [sidebarWidth, setSidebarWidth] = useState(() => { const saved = Number(localStorage.getItem('sidebarWidth')); return Number.isFinite(saved) && saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX ? saved : SIDEBAR_DEFAULT; });
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => { resizeRef.current = { startX: e.clientX, startWidth: sidebarWidth }; e.currentTarget.setPointerCapture(e.pointerId); document.body.classList.add('resizing'); e.preventDefault(); };
+  const moveResize = (e: React.PointerEvent<HTMLDivElement>) => { const drag = resizeRef.current; if (drag) setSidebarWidth(clampSidebar(drag.startWidth + e.clientX - drag.startX)); };
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => { if (!resizeRef.current) return; resizeRef.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); document.body.classList.remove('resizing'); };
+  const resizeByKey = (e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setSidebarWidth(w => clampSidebar(w + (e.key === 'ArrowRight' ? 16 : -16))); } };
   const validStudentId = /^\d{17}$/.test(studentId);
   const saveStudent = (value: string) => { setStudentId(value); localStorage.setItem('studentId', value); };
   const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); if (next !== 'admin') setAdminMenuOpen(false); };
@@ -54,6 +64,7 @@ export function App() {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 10000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { if (!highlightId) return; const timer = setTimeout(() => setHighlightId(null), 4000); return () => clearTimeout(timer); }, [highlightId]);
+  useEffect(() => { localStorage.setItem('sidebarWidth', String(sidebarWidth)); }, [sidebarWidth]);
   const remaining = (h: Hold) => Math.max(0, Math.ceil((new Date(h.expiresAt).getTime() - now) / 1000));
   const statusOf = (h: Hold) => h.status === 'HELD' && remaining(h) === 0 ? 'EXPIRED' : h.status;
   const myActiveClassIds = new Set(holds.filter(h => h.status === 'HELD' || h.status === 'PENDING' || h.status === 'CONFIRMED').map(h => h.classId));
@@ -136,7 +147,7 @@ export function App() {
       <div className="brand"><div className="brand-mark" aria-hidden="true">🎓</div><div><h1>Online School Admission Portal</h1><p>Simple and fast admission process</p></div></div>
       <label className="student-field">Student birth registration number:<div className="student-input-wrap"><span aria-hidden="true">▣</span><input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="201212..." maxLength={17} inputMode="numeric" /><span className={validStudentId ? 'verified' : 'unverified'}>{validStudentId ? '✓ Verified' : '17 digits'}</span></div></label>
     </header>
-    <div className="app-body">
+    <div className="app-body" style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}>
     <aside className="sidebar">
       <nav className="nav-tabs" aria-label="Primary navigation">
         <a className={tab === 'classes' ? 'active' : ''} href="#classes" onClick={e => { e.preventDefault(); switchTab('classes'); }}><span className="nav-icon" aria-hidden="true">☷</span><span className="nav-text"><span className="nav-title">Class list</span><span className="nav-sub">Browse available shifts</span></span></a>
@@ -148,6 +159,7 @@ export function App() {
       </nav>
       <div className="sidebar-note"><strong>Seat holds expire quickly.</strong><span>Pay the admission fee before the timer runs out.</span></div>
     </aside>
+    <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT)} onKeyDown={resizeByKey} title="Drag to resize the sidebar (double-click to reset)" />
     <div className="main-area">
     <main className={tab === 'admin' ? 'main-flush' : undefined}>{error && <div className="alert error">{error}</div>}{notice && <div className="alert success">{notice}</div>}
       {tab === 'classes' && <>
