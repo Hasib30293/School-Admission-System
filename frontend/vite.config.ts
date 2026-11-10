@@ -5,6 +5,7 @@ const backend = process.env.BACKEND_URL || 'http://localhost:8080';
 const proxy = {
   '/classes': backend,
   '/holds': backend,
+  '/admin': backend,
   '/me': backend,
   '/health': backend,
   '/swagger': backend,

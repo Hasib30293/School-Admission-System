@@ -63,7 +63,7 @@ describe('App', () => {
     expect(calls.some(c => c.includes('/confirm'))).toBe(false);
   });
 
-  it('confirms a held seat only after a transaction ID is provided', async () => {
+  it('submits payment details for admin verification after a transaction ID is provided', async () => {
     localStorage.setItem('studentId', '20152691234567890');
     const calls: string[] = [];
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -81,10 +81,49 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: /pay admission fee/i })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/mobile banking/i));
     fireEvent.change(screen.getByLabelText(/transaction id/i), { target: { value: 'TRX-2026-000123' } });
-    fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /submit for verification/i }));
 
-    expect(await screen.findByText(/payment confirmed via mobile banking/i)).toBeInTheDocument();
+    expect(await screen.findByText(/payment details submitted via mobile banking/i)).toBeInTheDocument();
+    expect(screen.getByText(/admin will verify/i)).toBeInTheDocument();
     expect(calls.some(c => c.includes('/confirm'))).toBe(true);
+  });
+
+  it('shows PENDING and hides payment actions while the admin verifies', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    stubFetch(url => {
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.endsWith('/me/holds')) return json([{ holdId: 'h1', classId: 'c1', className: 'Class 6 - Morning Shift', status: 'PENDING', transactionId: 'TRX-2026-000123', expiresAt: new Date(Date.now() + 120000).toISOString() }]);
+      return json([]);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /my applications/i }));
+    expect(await screen.findByText('PENDING')).toBeInTheDocument();
+    expect(screen.getByText(/waiting for admin approval/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /pay admission fee/i })).not.toBeInTheDocument();
+  });
+
+  it('lets the admin approve a payment after checking the transaction ID', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method || 'GET';
+      calls.push(`${method} ${url}`);
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.endsWith('/me/holds')) return json([]);
+      if (url.endsWith('/admin/payments/pending')) return json([{ holdId: 'h1', classId: 'c1', className: 'Class 6 - Morning Shift', studentId: '20152691234567890', studentName: 'Ayesha Rahman', contactInfo: '01712345678', paymentMethod: 'Mobile banking', transactionId: 'TRX-2026-000123', paymentSubmittedAt: new Date().toISOString(), createdAt: new Date().toISOString() }]);
+      return json({ status: 'CONFIRMED' });
+    }));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /admin/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^payments/i }));
+    expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
+    expect(screen.getByText('TRX-2026-000123')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+    expect(await screen.findByText(/payment approved/i)).toBeInTheDocument();
+    expect(calls.some(c => c === 'POST /holds/h1/approve')).toBe(true);
   });
 
   it('shows EXPIRED with a disabled pay button for an expired hold, without reload', async () => {

@@ -329,9 +329,11 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
 .actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 6px; }
 .badge { font-size: 12px; font-weight: 800; padding: 7px 12px; border-radius: 999px; }
 .badge.held { background: #fff2cd; color: #9c6d00; }
+.badge.pending { background: #e0ecff; color: #1d4ed8; }
 .badge.confirmed { background: #d9f8ed; color: #087452; }
 .badge.expired { background: #f1f3f6; color: #667085; }
 .badge.cancelled { background: #ffe1e3; color: #a43b45; }
+.badge.rejected { background: #ffe1e3; color: #a43b45; }
 
 label { display: block; color: #526984; font-size: 13px; font-weight: 700; margin: 16px 0; }
 input, select {
@@ -389,6 +391,15 @@ button:disabled { cursor: not-allowed; }
 .form-actions { display: flex; gap: 10px; grid-column: 1 / -1; margin-top: 2px; }
 .admin-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
 .admin-actions { justify-content: flex-end; }
+.payments-scroll { margin-top: 18px; }
+.payments-table { min-width: 980px; }
+.payments-table th, .payments-table td { padding: 12px 14px; font-size: 13px; }
+.payments-table th { text-align: left; }
+.payments-table code { color: #1e3454; background: #f1f5f9; padding: 3px 7px; border-radius: 6px; font-size: 12px; }
+.review-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.review-actions button { padding: 8px 12px; font-size: 12px; }
+.approve-button { background: #0f9d76; }
+.approve-button:hover { background: #0b8764; }
 @keyframes row-highlight { 0%, 55% { background: #ecfdf5; } 100% { background: transparent; } }
 .admin-scroll tr.row-highlight { animation: row-highlight 4s ease-out; }
 

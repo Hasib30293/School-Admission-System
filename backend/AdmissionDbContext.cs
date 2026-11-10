@@ -27,9 +27,10 @@ public sealed class AdmissionDbContext(DbContextOptions<AdmissionDbContext> opti
             e.Property(x => x.ContactInfo).HasMaxLength(100);
             e.Property(x => x.PaymentMethod).HasMaxLength(30);
             e.Property(x => x.TransactionId).HasMaxLength(100);
+            e.Property(x => x.ReviewNote).HasMaxLength(300);
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(12);
             e.HasOne(x => x.ClassOffering).WithMany(x => x.Holds).HasForeignKey(x => x.ClassOfferingId).OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => new { x.ClassOfferingId, x.StudentId }).HasFilter("\"Status\" IN ('Held', 'Confirmed')").IsUnique();
+            e.HasIndex(x => new { x.ClassOfferingId, x.StudentId }).HasFilter("\"Status\" IN ('Held', 'Pending', 'Confirmed')").IsUnique();
             e.HasIndex(x => new { x.Status, x.ExpiresAt });
         });
     }

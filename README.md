@@ -12,7 +12,7 @@ Open http://localhost:3000. The API is available at http://localhost:8080.
 
 The database is persisted in the `postgres-data` Docker volume. Configure `HOLD_DURATION_SECONDS` in `docker-compose.yml` (default: 600).
 
-The frontend calls the API through its own origin: nginx proxies `/classes`, `/holds`, `/me` and `/health` to the `backend` service, so `http://localhost:3000` works without any CORS or host/port setup. To point the UI at a different backend, build with `VITE_API_URL` set to that backend's full URL (e.g. `VITE_API_URL=http://example.com:8080 docker compose build frontend`); when it is empty the proxy is used. The backend itself is still exposed at `http://localhost:8080`.
+The frontend calls the API through its own origin: nginx proxies `/classes`, `/holds`, `/admin`, `/me` and `/health` to the `backend` service, so `http://localhost:3000` works without any CORS or host/port setup. To point the UI at a different backend, build with `VITE_API_URL` set to that backend's full URL (e.g. `VITE_API_URL=http://example.com:8080 docker compose build frontend`); when it is empty the proxy is used. The backend itself is still exposed at `http://localhost:8080`.
 
 ## Local development (one command)
 
@@ -57,9 +57,11 @@ All student-specific requests use the `X-Student-Id` header. The required routes
 - `DELETE /holds/{holdId}`
 - `GET /me/holds`
 
-Admin convenience endpoints (not part of the required contract): `PUT /classes/{classId}` updates a class name/seat count (seat count cannot drop below the seats currently held or confirmed), and `DELETE /classes/{classId}` deletes a class and its applications. They are used by the "Create Class (School Admin)" tab.
+`POST /holds/{holdId}/confirm` records the payment method and transaction ID and moves the application to `PENDING`; it does not confirm the admission. An admin must verify the transaction ID before the seat becomes `CONFIRMED`. Student contact numbers must be exactly 11 digits.
+
+Admin convenience endpoints (not part of the required contract): `PUT /classes/{classId}` updates a class name/seat count (seat count cannot drop below the seats currently held, awaiting approval or confirmed), and `DELETE /classes/{classId}` deletes a class and its applications. Payment verification uses `GET /admin/payments/pending`, `POST /holds/{holdId}/approve` and `POST /holds/{holdId}/reject` (an optional `{ "note": "..." }` body is stored with the decision). They are used by the "Admin" tab.
 
 ## Design notes
 
-Seat allocation is serialized per class with a PostgreSQL row lock inside a transaction. A unique partial index prevents more than one active hold or confirmed admission for the same student/class. A hosted background service expires holds without requiring an API request.
+Seat allocation is serialized per class with a PostgreSQL row lock inside a transaction. A unique partial index prevents more than one active hold, pending payment or confirmed admission for the same student/class. A hosted background service expires unpaid holds without requiring an API request; holds awaiting payment verification stay reserved until an admin approves or rejects them.
 

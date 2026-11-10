@@ -1,6 +1,6 @@
 namespace SchoolAdmission;
 
-public enum HoldStatus { Held, Confirmed, Expired, Cancelled }
+public enum HoldStatus { Held, Pending, Confirmed, Expired, Cancelled, Rejected }
 
 public sealed class ClassOffering
 {
@@ -24,6 +24,9 @@ public sealed class AdmissionHold
     public HoldStatus Status { get; set; } = HoldStatus.Held;
     public string? PaymentMethod { get; set; }
     public string? TransactionId { get; set; }
+    public DateTimeOffset? PaymentSubmittedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    public string? ReviewNote { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? ConfirmedAt { get; set; }
@@ -31,9 +34,10 @@ public sealed class AdmissionHold
 
 public sealed record CreateClassRequest(string? Name, int TotalSeats);
 public sealed record UpdateClassRequest(string? Name, int TotalSeats);
-public sealed record ClassResponse(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats);
-public sealed record HoldResponse(string HoldId, string ClassId, string? ClassName, string? StudentId, string Status, DateTimeOffset? ExpiresAt);
-public sealed record ConfirmResponse(string HoldId, string Status);
+public sealed record ClassResponse(string Id, string Name, int TotalSeats, int HeldSeats, int ConfirmedSeats, int AvailableSeats, int PendingSeats);
+public sealed record HoldResponse(string HoldId, string ClassId, string? ClassName, string? StudentId, string Status, DateTimeOffset? ExpiresAt, string? PaymentMethod, string? TransactionId, DateTimeOffset? PaymentSubmittedAt, DateTimeOffset? ConfirmedAt, string? ReviewNote);
 public sealed record CreateHoldRequest(string? StudentName, string? FatherName, string? MotherName, string? ContactInfo);
 public sealed record ConfirmPaymentRequest(string? PaymentMethod, string? TransactionId);
-public sealed record EnrolledStudentResponse(string HoldId, string StudentId, string? StudentName, string? FatherName, string? MotherName, string? ContactInfo, string Status, string? PaymentMethod, string? TransactionId, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? ConfirmedAt);
+public sealed record ReviewPaymentRequest(string? Note);
+public sealed record PendingPaymentResponse(string HoldId, string ClassId, string ClassName, string StudentId, string? StudentName, string? FatherName, string? MotherName, string? ContactInfo, string? PaymentMethod, string? TransactionId, DateTimeOffset? PaymentSubmittedAt, DateTimeOffset CreatedAt);
+public sealed record EnrolledStudentResponse(string HoldId, string StudentId, string? StudentName, string? FatherName, string? MotherName, string? ContactInfo, string Status, string? PaymentMethod, string? TransactionId, DateTimeOffset? PaymentSubmittedAt, string? ReviewNote, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? ConfirmedAt);

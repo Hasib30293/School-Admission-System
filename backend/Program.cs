@@ -38,7 +38,21 @@ using (var scope = app.Services.CreateScope())
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ContactInfo" varchar(100);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "PaymentMethod" varchar(30);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "TransactionId" varchar(100);
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "PaymentSubmittedAt" timestamptz;
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ReviewedAt" timestamptz;
+        ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ReviewNote" varchar(300);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ConfirmedAt" timestamptz;
+        """);
+    db.Database.ExecuteSqlRaw("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'IX_holds_ClassOfferingId_StudentId') THEN
+                DROP INDEX "IX_holds_ClassOfferingId_StudentId";
+            END IF;
+        END $$;
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_holds_ClassOfferingId_StudentId"
+            ON holds ("ClassOfferingId", "StudentId")
+            WHERE "Status" IN ('Held', 'Pending', 'Confirmed');
         """);
 }
 
@@ -76,8 +90,8 @@ app.MapPut("/classes/{classId:guid}", async (Guid classId, [FromBody] UpdateClas
     var cls = await db.Classes.FromSqlInterpolated($"SELECT * FROM classes WHERE \"Id\" = {classId} FOR UPDATE").SingleOrDefaultAsync();
     if (cls is null) return Results.NotFound(new { message = "Class not found." });
     await ExpireDue(db, classId);
-    var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed));
-    if (request.TotalSeats < used) return Results.Conflict(new { message = $"Total seats cannot be lower than the {used} seats already held or confirmed." });
+    var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Pending || x.Status == HoldStatus.Confirmed));
+    if (request.TotalSeats < used) return Results.Conflict(new { message = $"Total seats cannot be lower than the {used} seats already held, awaiting approval or confirmed." });
     cls.Name = request.Name.Trim();
     cls.TotalSeats = request.TotalSeats;
     await db.SaveChangesAsync();
@@ -99,14 +113,17 @@ app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest re
     var studentId = StudentId(request);
     if (studentId is null) return Results.BadRequest(new { message = "X-Student-Id must contain exactly 17 digits." });
     var details = await ReadBody<CreateHoldRequest>(request);
+    var contactInfo = Clean(details?.ContactInfo, 100);
+    if (contactInfo is not null && !Regex.IsMatch(contactInfo, "^[0-9]{11}$"))
+        return Results.BadRequest(new { message = "Contact number must be exactly 11 digits." });
     var duration = Math.Clamp(config.GetValue("HOLD_DURATION_SECONDS", 600), 1, 86400);
     await using var tx = await db.Database.BeginTransactionAsync();
     var cls = await db.Classes.FromSqlInterpolated($"SELECT * FROM classes WHERE \"Id\" = {classId} FOR UPDATE").SingleOrDefaultAsync();
     if (cls is null) return Results.NotFound(new { message = "Class not found." });
     await ExpireDue(db, classId);
-    var existing = await db.Holds.AnyAsync(x => x.ClassOfferingId == classId && x.StudentId == studentId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed));
+    var existing = await db.Holds.AnyAsync(x => x.ClassOfferingId == classId && x.StudentId == studentId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Pending || x.Status == HoldStatus.Confirmed));
     if (existing) return Results.Conflict(new { message = "This student already has an active application for this class." });
-    var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed));
+    var used = await db.Holds.CountAsync(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Pending || x.Status == HoldStatus.Confirmed));
     if (used >= cls.TotalSeats) return Results.Conflict(new { message = "No seats are currently available." });
     var hold = new AdmissionHold
     {
@@ -115,7 +132,7 @@ app.MapPost("/classes/{classId:guid}/holds", async (Guid classId, HttpRequest re
         StudentName = Clean(details?.StudentName, 200),
         FatherName = Clean(details?.FatherName, 200),
         MotherName = Clean(details?.MotherName, 200),
-        ContactInfo = Clean(details?.ContactInfo, 100),
+        ContactInfo = contactInfo,
         ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(duration)
     };
     db.Holds.Add(hold);
@@ -128,12 +145,13 @@ app.MapGet("/classes/{classId:guid}/holds", async (Guid classId, AdmissionDbCont
     if (!await db.Classes.AnyAsync(x => x.Id == classId)) return Results.NotFound(new { message = "Class not found." });
     await ExpireDue(db, classId);
     var holds = await db.Holds.AsNoTracking()
-        .Where(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Confirmed))
+        .Where(x => x.ClassOfferingId == classId && (x.Status == HoldStatus.Held || x.Status == HoldStatus.Pending || x.Status == HoldStatus.Confirmed))
         .OrderByDescending(x => x.CreatedAt)
         .ToListAsync();
     return Results.Ok(holds.Select(x => new EnrolledStudentResponse(
         x.Id.ToString(), x.StudentId, x.StudentName, x.FatherName, x.MotherName, x.ContactInfo,
-        x.Status.ToString().ToUpperInvariant(), x.PaymentMethod, x.TransactionId, x.CreatedAt, x.ExpiresAt, x.ConfirmedAt)));
+        x.Status.ToString().ToUpperInvariant(), x.PaymentMethod, x.TransactionId, x.PaymentSubmittedAt, x.ReviewNote,
+        x.CreatedAt, x.ExpiresAt, x.ConfirmedAt)));
 });
 
 app.MapGet("/holds/{holdId:guid}", async (Guid holdId, AdmissionDbContext db) =>
@@ -152,19 +170,66 @@ app.MapPost("/holds/{holdId:guid}/confirm", async (Guid holdId, HttpRequest requ
     if (hold is null) return Results.NotFound(new { message = "Application not found." });
     if (hold.StudentId != studentId) return Results.Json(new { message = "You can only manage your own application." }, statusCode: StatusCodes.Status403Forbidden);
     if (hold.Status == HoldStatus.Confirmed) return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED" });
+    if (hold.Status == HoldStatus.Pending) return Results.Ok(new { holdId = hold.Id.ToString(), status = "PENDING", paymentMethod = hold.PaymentMethod, transactionId = hold.TransactionId });
     if (hold.Status != HoldStatus.Held || hold.ExpiresAt <= DateTimeOffset.UtcNow) return Results.Conflict(new { message = "This hold has expired or is no longer active." });
     var payment = await ReadBody<ConfirmPaymentRequest>(request);
     var transactionId = payment?.TransactionId?.Trim();
-    if (string.IsNullOrWhiteSpace(transactionId)) return Results.BadRequest(new { message = "Transaction ID is required to confirm the payment." });
+    if (string.IsNullOrWhiteSpace(transactionId)) return Results.BadRequest(new { message = "Transaction ID is required to submit the payment." });
     if (transactionId.Length > 100) return Results.BadRequest(new { message = "Transaction ID cannot be longer than 100 characters." });
     var paymentMethod = payment?.PaymentMethod?.Trim();
     if (paymentMethod is not ("Banking" or "Mobile banking" or "Offline")) return Results.BadRequest(new { message = "Select a valid payment method." });
-    hold.Status = HoldStatus.Confirmed;
+    // Payment is recorded but the admission is not confirmed until an admin verifies the transaction.
+    hold.Status = HoldStatus.Pending;
     hold.PaymentMethod = paymentMethod;
     hold.TransactionId = transactionId;
-    hold.ConfirmedAt = DateTimeOffset.UtcNow;
+    hold.PaymentSubmittedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
-    return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED", paymentMethod, transactionId });
+    return Results.Ok(new { holdId = hold.Id.ToString(), status = "PENDING", paymentMethod, transactionId, message = "Payment details submitted. An admin must verify the transaction ID before the seat is confirmed." });
+});
+
+app.MapGet("/admin/payments/pending", async (AdmissionDbContext db) =>
+{
+    var pending = await db.Holds.AsNoTracking().Include(x => x.ClassOffering)
+        .Where(x => x.Status == HoldStatus.Pending)
+        .OrderBy(x => x.PaymentSubmittedAt)
+        .ToListAsync();
+    return Results.Ok(pending.Select(x => new PendingPaymentResponse(
+        x.Id.ToString(), x.ClassOfferingId.ToString(), x.ClassOffering?.Name ?? "", x.StudentId,
+        x.StudentName, x.FatherName, x.MotherName, x.ContactInfo, x.PaymentMethod, x.TransactionId,
+        x.PaymentSubmittedAt, x.CreatedAt)));
+});
+
+app.MapPost("/holds/{holdId:guid}/approve", async (Guid holdId, HttpRequest request, AdmissionDbContext db) =>
+{
+    await using var tx = await db.Database.BeginTransactionAsync();
+    var hold = await db.Holds.FromSqlInterpolated($"SELECT * FROM holds WHERE \"Id\" = {holdId} FOR UPDATE").SingleOrDefaultAsync();
+    if (hold is null) return Results.NotFound(new { message = "Application not found." });
+    if (hold.Status == HoldStatus.Confirmed) return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED" });
+    if (hold.Status != HoldStatus.Pending) return Results.Conflict(new { message = "Only a payment awaiting verification can be approved." });
+    var review = await ReadBody<ReviewPaymentRequest>(request);
+    hold.Status = HoldStatus.Confirmed;
+    hold.ConfirmedAt = DateTimeOffset.UtcNow;
+    hold.ReviewedAt = DateTimeOffset.UtcNow;
+    hold.ReviewNote = Clean(review?.Note, 300);
+    await db.SaveChangesAsync();
+    await tx.CommitAsync();
+    return Results.Ok(new { holdId = hold.Id.ToString(), status = "CONFIRMED", transactionId = hold.TransactionId });
+});
+
+app.MapPost("/holds/{holdId:guid}/reject", async (Guid holdId, HttpRequest request, AdmissionDbContext db) =>
+{
+    await using var tx = await db.Database.BeginTransactionAsync();
+    var hold = await db.Holds.FromSqlInterpolated($"SELECT * FROM holds WHERE \"Id\" = {holdId} FOR UPDATE").SingleOrDefaultAsync();
+    if (hold is null) return Results.NotFound(new { message = "Application not found." });
+    if (hold.Status == HoldStatus.Rejected) return Results.Ok(new { holdId = hold.Id.ToString(), status = "REJECTED" });
+    if (hold.Status != HoldStatus.Pending) return Results.Conflict(new { message = "Only a payment awaiting verification can be rejected." });
+    var review = await ReadBody<ReviewPaymentRequest>(request);
+    hold.Status = HoldStatus.Rejected;
+    hold.ReviewedAt = DateTimeOffset.UtcNow;
+    hold.ReviewNote = Clean(review?.Note, 300);
+    await db.SaveChangesAsync();
+    await tx.CommitAsync();
+    return Results.Ok(new { holdId = hold.Id.ToString(), status = "REJECTED", note = hold.ReviewNote });
 });
 
 app.MapDelete("/holds/{holdId:guid}", async (Guid holdId, HttpRequest request, AdmissionDbContext db) =>
@@ -205,6 +270,8 @@ static async Task<T?> ReadBody<T>(HttpRequest request)
 }
 static async Task ExpireDue(AdmissionDbContext db, Guid? classId = null)
 {
+    // Pending payments are deliberately not expired: the student has submitted payment details
+    // and the seat stays reserved until an admin approves or rejects the transaction.
     var query = db.Holds.Where(x => x.Status == HoldStatus.Held && x.ExpiresAt <= DateTimeOffset.UtcNow);
     if (classId.HasValue) query = query.Where(x => x.ClassOfferingId == classId.Value);
     var due = await query.ToListAsync();
@@ -215,10 +282,25 @@ static async Task<List<ClassResponse>> BuildClassResponses(AdmissionDbContext db
 {
     await ExpireDue(db);
     return await db.Classes.AsNoTracking().Select(c => new ClassResponse(c.Id.ToString(), c.Name, c.TotalSeats,
-        c.Holds.Count(h => h.Status == HoldStatus.Held), c.Holds.Count(h => h.Status == HoldStatus.Confirmed),
-        c.TotalSeats - c.Holds.Count(h => h.Status == HoldStatus.Held) - c.Holds.Count(h => h.Status == HoldStatus.Confirmed))).ToListAsync();
+        c.Holds.Count(h => h.Status == HoldStatus.Held || h.Status == HoldStatus.Pending),
+        c.Holds.Count(h => h.Status == HoldStatus.Confirmed),
+        c.TotalSeats - c.Holds.Count(h => h.Status == HoldStatus.Held || h.Status == HoldStatus.Pending) - c.Holds.Count(h => h.Status == HoldStatus.Confirmed),
+        c.Holds.Count(h => h.Status == HoldStatus.Pending))).ToListAsync();
 }
 static async Task<ClassResponse?> BuildClassResponse(AdmissionDbContext db, Guid id) => (await BuildClassResponses(db)).SingleOrDefault(x => x.Id == id.ToString());
-static object ToHoldResponse(AdmissionHold h, bool includeStudent) => new { holdId = h.Id.ToString(), classId = h.ClassOfferingId.ToString(), className = h.ClassOffering?.Name, studentId = includeStudent ? h.StudentId : null, status = h.Status.ToString().ToUpperInvariant(), expiresAt = h.ExpiresAt };
+static object ToHoldResponse(AdmissionHold h, bool includeStudent) => new
+{
+    holdId = h.Id.ToString(),
+    classId = h.ClassOfferingId.ToString(),
+    className = h.ClassOffering?.Name,
+    studentId = includeStudent ? h.StudentId : null,
+    status = h.Status.ToString().ToUpperInvariant(),
+    expiresAt = h.ExpiresAt,
+    paymentMethod = h.PaymentMethod,
+    transactionId = h.TransactionId,
+    paymentSubmittedAt = h.PaymentSubmittedAt,
+    confirmedAt = h.ConfirmedAt,
+    reviewNote = h.ReviewNote
+};
 
 public partial class Program { }
