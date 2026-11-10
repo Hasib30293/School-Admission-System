@@ -49,7 +49,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /student account/i }));
     expect(screen.getByLabelText(/birth registration number/i)).toHaveValue('20152691234567890');
     expect(screen.getByText('Verified')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /copy registration number/i })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Classes' }));
@@ -64,9 +64,25 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /student account/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    fireEvent.click(screen.getByRole('button', { name: /copy registration number/i }));
 
     expect(writeText).toHaveBeenCalledWith('20152691234567890');
+  });
+
+  it('shows the 17-digit requirement until the registration number is valid', async () => {
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /student account/i }));
+    const field = screen.getByLabelText(/birth registration number/i);
+
+    fireEvent.change(field, { target: { value: '12345' } });
+    expect(screen.getByText(/must be exactly 17 digits \(5\/17\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Not verified')).toBeInTheDocument();
+
+    fireEvent.change(field, { target: { value: '20152691234567890' } });
+    expect(screen.getByText('Registration number verified.')).toBeInTheDocument();
+    expect(screen.getByText('Verified')).toBeInTheDocument();
   });
 
   it('disables the apply button when no seats are available', async () => {

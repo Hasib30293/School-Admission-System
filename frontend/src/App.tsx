@@ -26,6 +26,12 @@ async function api<T>(path: string, options: RequestInit = {}, studentId?: strin
 function UserIcon({ size = 20 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2Zm0 1.7c-4.1 0-7.4 2.3-7.4 5.2v1.1h14.8v-1.1c0-2.9-3.3-5.2-7.4-5.2Z" /></svg>;
 }
+function CopyIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5.5 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.5" /></svg>;
+}
+function CheckIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>;
+}
 
 export function App() {
   const [studentId, setStudentId] = useState(() => localStorage.getItem('studentId') || '');
@@ -185,10 +191,12 @@ export function App() {
           <div className="profile-body">
             <span className="profile-label">Birth registration number</span>
             <div className="profile-reg-row">
-              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" />
-              <button type="button" className="copy-button" onClick={copyRegistration} disabled={!studentId}>{copied ? 'Copied' : 'Copy'}</button>
+              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" aria-invalid={!validStudentId} aria-describedby="profile-reg-help" />
+              <button type="button" className={`copy-button ${copied ? 'is-copied' : ''}`} onClick={copyRegistration} disabled={!studentId} aria-label={copied ? 'Registration number copied' : 'Copy registration number'} title={copied ? 'Copied' : 'Copy registration number'}>{copied ? <CheckIcon /> : <CopyIcon />}</button>
             </div>
-            <p className="profile-hint">Used to load your applications and seat holds.</p>
+            <p id="profile-reg-help" className={`profile-hint ${validStudentId ? 'ok' : studentId ? 'warn' : ''}`}>
+              {validStudentId ? 'Registration number verified.' : `Birth registration number must be exactly 17 digits${studentId ? ` (${studentId.length}/17)` : ''}.`}
+            </p>
           </div>
         </div>}
       </div>}
