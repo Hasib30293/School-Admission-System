@@ -208,9 +208,9 @@ export function App() {
           <h3>{editingId ? 'Edit class' : 'Create a class'}</h3>
           <p className="muted">Set a separate seat capacity for each class and shift.</p>
           <form onSubmit={saveClass}>
-            <label>Class name<input required value={className} onChange={e => setClassName(e.target.value)} placeholder="ex: Class 6" /></label>
+            <label>Class name<input required value={className} onChange={e => setClassName(e.target.value)} placeholder="e.g., Class 6" /></label>
             <label>Shift name<select value={shift} onChange={e => setShift(e.target.value)}><option value="Morning">Morning</option><option value="Day">Day</option></select></label>
-            <label>Total seats<input required min="1" type="number" value={seats} onChange={e => setSeats(e.target.value)} placeholder="ex: 120" /></label>
+            <label>Total seats<input required min="1" type="number" value={seats} onChange={e => setSeats(e.target.value)} placeholder="e.g., 120" /></label>
             <div className="form-actions"><button>{editingId ? 'Save changes' : 'Create class'}</button>{editingId && <button type="button" className="secondary" onClick={cancelEdit}>Cancel</button>}</div>
           </form>
         </> : adminView === 'list' ? <>
@@ -234,13 +234,13 @@ export function App() {
         <p>Enter the student details to hold a seat, then submit the payment details for admin verification.</p>
         {enrollError && <div className="alert error enroll-error">{enrollError}</div>}
         <form className="enroll-form" onSubmit={submitEnroll}>
-          <label>Registration number<input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="ex: 20121234567890123" maxLength={17} inputMode="numeric" required /></label>
-          <label>Student name<input value={enrollForm.name} onChange={e => setEnrollForm(f => ({ ...f, name: e.target.value }))} placeholder="ex: Ayesha Rahman" required /></label>
+          <label>Registration number<input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="e.g., 20121234567890123" maxLength={17} inputMode="numeric" required /></label>
+          <label>Student name<input value={enrollForm.name} onChange={e => setEnrollForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Ayesha Rahman" required /></label>
           <div className="enroll-grid">
-            <label>Father's name<input value={enrollForm.fatherName} onChange={e => setEnrollForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="ex: Abdul Rahman" required /></label>
-            <label>Mother's name<input value={enrollForm.motherName} onChange={e => setEnrollForm(f => ({ ...f, motherName: e.target.value }))} placeholder="ex: Fatima Begum" required /></label>
+            <label>Father's name<input value={enrollForm.fatherName} onChange={e => setEnrollForm(f => ({ ...f, fatherName: e.target.value }))} placeholder="e.g., Abdul Rahman" required /></label>
+            <label>Mother's name<input value={enrollForm.motherName} onChange={e => setEnrollForm(f => ({ ...f, motherName: e.target.value }))} placeholder="e.g., Fatima Begum" required /></label>
           </div>
-          <label>Contact information<input value={enrollForm.contact} onChange={e => setEnrollForm(f => ({ ...f, contact: e.target.value.replace(/\D/g, '').slice(0, 11) }))} placeholder="ex: 01712345678" maxLength={11} inputMode="numeric" pattern="[0-9]{11}" title="Contact number must be exactly 11 digits" required /></label>
+          <label>Contact information<input value={enrollForm.contact} onChange={e => setEnrollForm(f => ({ ...f, contact: e.target.value.replace(/\D/g, '').slice(0, 11) }))} placeholder="e.g., 01712345678" maxLength={11} inputMode="numeric" pattern="[0-9]{11}" title="Contact number must be exactly 11 digits" required /></label>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={closeEnroll} disabled={enrolling}>Cancel</button>
             <button type="submit" disabled={enrolling}>{enrolling ? 'Processing payment...' : 'Enroll & pay'}</button>
@@ -260,7 +260,7 @@ export function App() {
             <legend>Payment method</legend>
             {(['Banking', 'Mobile banking', 'Offline'] as const).map(m => <label key={m} className={`pay-method ${paymentMethod === m ? 'active' : ''}`}><input type="radio" name="paymentMethod" value={m} checked={paymentMethod === m} onChange={() => setPaymentMethod(m)} /><span>{m}</span></label>)}
           </fieldset>
-          <label>Transaction ID<input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="ex: TRX-2026-000123" required /></label>
+          <label>Transaction ID<input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TRX-2026-000123" required /></label>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={closePay} disabled={paying}>Cancel</button>
             <button type="submit" disabled={paying}>{paying ? 'Submitting...' : 'Submit for verification'}</button>
