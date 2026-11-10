@@ -26,11 +26,8 @@ async function api<T>(path: string, options: RequestInit = {}, studentId?: strin
 function UserIcon({ size = 20 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12.2a4.1 4.1 0 1 0 0-8.2 4.1 4.1 0 0 0 0 8.2Zm0 1.7c-4.1 0-7.4 2.3-7.4 5.2v1.1h14.8v-1.1c0-2.9-3.3-5.2-7.4-5.2Z" /></svg>;
 }
-function CopyIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5.5 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.5" /></svg>;
-}
-function CheckIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>;
+function CheckIcon({ size = 16 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>;
 }
 
 export function App() {
@@ -69,22 +66,7 @@ export function App() {
   const validStudentId = /^\d{17}$/.test(studentId);
   const saveStudent = (value: string) => { setStudentId(value); localStorage.setItem('studentId', value); };
   const [profileOpen, setProfileOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const profileRef = useRef<HTMLDivElement | null>(null);
-  const copyRegistration = async () => {
-    if (!studentId) return;
-    let copiedOk = false;
-    try { await navigator.clipboard.writeText(studentId); copiedOk = true; }
-    catch {
-      try {
-        const field = document.createElement('textarea');
-        field.value = studentId; field.setAttribute('readonly', ''); field.style.position = 'fixed'; field.style.opacity = '0';
-        document.body.appendChild(field); field.select(); document.execCommand('copy'); field.remove();
-        copiedOk = true;
-      } catch { copiedOk = false; }
-    }
-    if (copiedOk) setCopied(true);
-  };
   const switchTab = (next: 'classes' | 'applications' | 'admin') => { setTab(next); setNotice(''); setError(''); setAdminMenuOpen(false); if (next === 'admin') setProfileOpen(false); };
   const refresh = useCallback(async () => { try { setClasses(await api<ClassItem[]>('/classes')); if (/^\d{17}$/.test(studentId)) setHolds(await api<Hold[]>('/me/holds', {}, studentId)); else setHolds([]); setError(prev => prev === NETWORK_ERROR || prev === SERVER_ERROR ? '' : prev); } catch (e) { setError((e as Error).message); } }, [studentId]);
   useEffect(() => { refresh(); const timer = setInterval(refresh, 3000); return () => clearInterval(timer); }, [refresh]);
@@ -100,7 +82,6 @@ export function App() {
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('mousedown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
   }, [profileOpen]);
-  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); }, [copied]);
   const remaining = (h: Hold) => Math.max(0, Math.ceil((new Date(h.expiresAt).getTime() - now) / 1000));
   const statusOf = (h: Hold) => h.status === 'HELD' && remaining(h) === 0 ? 'EXPIRED' : h.status;
   const myActiveClassIds = new Set(holds.filter(h => h.status === 'HELD' || h.status === 'PENDING' || h.status === 'CONFIRMED').map(h => h.classId));
@@ -190,13 +171,11 @@ export function App() {
           </div>
           <div className="profile-body">
             <span className="profile-label">Birth registration number</span>
-            <div className="profile-reg-row">
-              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" aria-invalid={!validStudentId} aria-describedby="profile-reg-help" />
-              <button type="button" className={`copy-button ${copied ? 'is-copied' : ''}`} onClick={copyRegistration} disabled={!studentId} aria-label={copied ? 'Registration number copied' : 'Copy registration number'} title={copied ? 'Copied' : 'Copy registration number'}>{copied ? <CheckIcon /> : <CopyIcon />}</button>
+            <div className="profile-number">
+              <input value={studentId} onChange={e => saveStudent(e.target.value.replace(/\D/g, ''))} placeholder="17-digit number" maxLength={17} inputMode="numeric" aria-label="Birth registration number" aria-invalid={!validStudentId} aria-describedby={validStudentId ? undefined : 'profile-reg-help'} />
+              {validStudentId && <span className="profile-number-ok" aria-hidden="true"><CheckIcon size={12} /></span>}
             </div>
-            <p id="profile-reg-help" className={`profile-hint ${validStudentId ? 'ok' : studentId ? 'warn' : ''}`}>
-              {validStudentId ? 'Registration number verified.' : `Birth registration number must be exactly 17 digits${studentId ? ` (${studentId.length}/17)` : ''}.`}
-            </p>
+            {!validStudentId && <p id="profile-reg-help" className={`profile-hint ${studentId ? 'warn' : ''}`}>Birth registration number must be exactly 17 digits{studentId ? ` (${studentId.length}/17)` : ''}.</p>}
           </div>
         </div>}
       </div>}

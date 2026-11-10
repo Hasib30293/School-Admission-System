@@ -49,24 +49,11 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /student account/i }));
     expect(screen.getByLabelText(/birth registration number/i)).toHaveValue('20152691234567890');
     expect(screen.getByText('Verified')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /copy registration number/i })).toBeEnabled();
+    expect(screen.queryByText(/must be exactly 17 digits/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Class' }));
     expect(screen.queryByRole('button', { name: /student account/i })).not.toBeInTheDocument();
-  });
-
-  it('copies the registration number from the profile menu', async () => {
-    localStorage.setItem('studentId', '20152691234567890');
-    const writeText = vi.fn(() => Promise.resolve());
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
-    render(<App />);
-
-    fireEvent.click(screen.getByRole('button', { name: /student account/i }));
-    fireEvent.click(screen.getByRole('button', { name: /copy registration number/i }));
-
-    expect(writeText).toHaveBeenCalledWith('20152691234567890');
   });
 
   it('shows the 17-digit requirement until the registration number is valid', async () => {
@@ -81,8 +68,8 @@ describe('App', () => {
     expect(screen.getByText('Not verified')).toBeInTheDocument();
 
     fireEvent.change(field, { target: { value: '20152691234567890' } });
-    expect(screen.getByText('Registration number verified.')).toBeInTheDocument();
     expect(screen.getByText('Verified')).toBeInTheDocument();
+    expect(screen.queryByText(/must be exactly 17 digits/i)).not.toBeInTheDocument();
   });
 
   it('disables the apply button when no seats are available', async () => {

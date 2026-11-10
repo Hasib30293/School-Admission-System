@@ -181,36 +181,31 @@ button.profile-button:hover { background: #f1f5ff; border-color: #d5e3ff; color:
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.profile-reg-row { display: flex; align-items: center; gap: 8px; }
-.profile-reg-row input {
-  flex: 1;
+.profile-number { position: relative; display: flex; align-items: center; }
+.profile-number input {
+  width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 10px 12px;
+  padding: 10px 40px 10px 12px;
   border-radius: 9px;
   background: #f8fafc;
   font-size: 13px;
   letter-spacing: .04em;
 }
-.copy-button {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  padding: 0;
+.profile-number-ok {
+  position: absolute;
+  right: 10px;
   display: grid;
   place-items: center;
-  border: 1px solid #d9e2ec;
-  border-radius: 9px;
-  background: #fff;
-  color: #52647d;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #0f9d76;
+  pointer-events: none;
 }
-button.copy-button:not(:disabled):hover { background: #f1f5ff; border-color: #c7d7f7; color: var(--blue-dark); }
-.copy-button.is-copied,
-button.copy-button.is-copied:hover { background: #f0fff9; border-color: #a5ecd4; color: #0f9d76; }
-.copy-button:disabled { background: #f8fafc; border-color: #e6edf4; color: #b3c0d1; }
 .profile-hint { margin: 8px 0 0; color: #8a97ab; font-size: 11.5px; line-height: 1.4; }
 .profile-hint.warn { color: #b45309; }
-.profile-hint.ok { color: #0f9d76; }
 
 .verified, .unverified {
   white-space: nowrap;
