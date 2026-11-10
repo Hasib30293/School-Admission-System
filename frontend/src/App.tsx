@@ -202,12 +202,13 @@ export function App() {
         <button type="button" className="modal-close" aria-label="Close" onClick={closeEnroll}>×</button>
         <div className="modal-icon enroll-icon" aria-hidden="true">🎓</div>
         <h3 id="enroll-title">Enroll in {enrollClass.name}</h3>
-        <p>Enter the student details to hold a seat, then submit the payment details for admin verification.</p>
+        <p>Enter the required details to hold a seat, then submit the payment details for admin verification.</p>
+        <p className="required-note"><span aria-hidden="true">*</span> Required field</p>
         {enrollError && <div className="alert error enroll-error">{enrollError}</div>}
         <form className="enroll-form" onSubmit={submitEnroll}>
-          <label>Student birth registration number<input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="Enter exactly 17 digits" maxLength={17} inputMode="numeric" required /></label>
-          <label>Student name<input value={enrollForm.name} onChange={e => setEnrollForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Ayesha Rahman" required /></label>
-          <label>Contact information<input value={enrollForm.contact} onChange={e => setEnrollForm(f => ({ ...f, contact: e.target.value.replace(/\D/g, '').slice(0, 11) }))} placeholder="e.g., 01712345678" maxLength={11} inputMode="numeric" pattern="[0-9]{11}" title="Contact number must be exactly 11 digits" required /></label>
+          <label>Student birth registration number <span className="required-mark" aria-hidden="true">*</span><input value={enrollForm.reg} onChange={e => setEnrollForm(f => ({ ...f, reg: e.target.value.replace(/\D/g, '') }))} placeholder="Enter exactly 17 digits" maxLength={17} inputMode="numeric" required /></label>
+          <label>Student name <span className="required-mark" aria-hidden="true">*</span><input value={enrollForm.name} onChange={e => setEnrollForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Ayesha Rahman" required /></label>
+          <label>Contact information <span className="required-mark" aria-hidden="true">*</span><input value={enrollForm.contact} onChange={e => setEnrollForm(f => ({ ...f, contact: e.target.value.replace(/\D/g, '').slice(0, 11) }))} placeholder="e.g., 01712345678" maxLength={11} inputMode="numeric" pattern="[0-9]{11}" title="Contact number must be exactly 11 digits" required /></label>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={closeEnroll} disabled={enrolling}>Cancel</button>
             <button type="submit" disabled={enrolling}>{enrolling ? 'Submitting...' : 'Submit application'}</button>

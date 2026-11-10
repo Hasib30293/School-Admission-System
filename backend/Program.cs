@@ -46,6 +46,9 @@ using (var scope = app.Services.CreateScope())
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ReviewedAt" timestamptz;
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ReviewNote" varchar(300);
         ALTER TABLE holds ADD COLUMN IF NOT EXISTS "ConfirmedAt" timestamptz;
+        UPDATE holds
+        SET "ApplicationReference" = 'APP-' || to_char("CreatedAt", 'YYYYMMDD') || '-' || substring(replace("Id"::text, '-', '') from 1 for 6)
+        WHERE "ApplicationReference" IS NULL OR "ApplicationReference" = '';
         """);
     db.Database.ExecuteSqlRaw("""
         DO $$
