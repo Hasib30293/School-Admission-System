@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App } from './App';
 
 function json(body: unknown, status = 200): Promise<Response> {
@@ -54,6 +54,24 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Manage Classes' }));
     expect(screen.queryByRole('button', { name: /student account/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the full birth registration number on the application page', async () => {
+    const reg = '20152691234567890';
+    stubFetch(url => {
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.includes('/applications/search')) return json([{ holdId: 'h1', applicationReference: 'APP-20260101-000001', classId: 'c1', className: 'Class 6 - Morning Shift', shift: 'Morning', studentName: 'Ayesha Rahman', birthRegistrationNumber: reg, createdAt: new Date().toISOString(), applicationStatus: 'PENDING', paymentStatus: 'Paid' }]);
+      return json([]);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /^application/i }));
+    fireEvent.change(screen.getByLabelText(/birth registration number/i), { target: { value: reg } });
+    fireEvent.click(screen.getByRole('button', { name: /search/i }));
+
+    expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
+    const label = screen.getByText('Birth registration number');
+    expect(within(label.parentElement as HTMLElement).getByText(reg)).toBeInTheDocument();
   });
 
   it('shows the 17-digit requirement until the registration number is valid', async () => {
