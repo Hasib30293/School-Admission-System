@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from './App';
 
 function json(body: unknown, status = 200): Promise<Response> {
@@ -48,7 +48,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /student account/i }));
     expect(screen.getByLabelText(/birth registration number/i)).toHaveValue('20152691234567890');
-    expect(screen.getByText('Verified')).toBeInTheDocument();
+    expect(screen.queryByText('Verified')).not.toBeInTheDocument();
     expect(screen.queryByText(/must be exactly 17 digits/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
@@ -65,11 +65,25 @@ describe('App', () => {
 
     fireEvent.change(field, { target: { value: '12345' } });
     expect(screen.getByText(/must be exactly 17 digits \(5\/17\)/i)).toBeInTheDocument();
-    expect(screen.getByText('Not verified')).toBeInTheDocument();
+    expect(screen.queryByText('Not verified')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled();
 
     fireEvent.change(field, { target: { value: '20152691234567890' } });
-    expect(screen.getByText('Verified')).toBeInTheDocument();
+    expect(screen.queryByText('Verified')).not.toBeInTheDocument();
     expect(screen.queryByText(/must be exactly 17 digits/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled();
+  });
+
+  it('saves the registration number with the Save button and closes the menu', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /student account/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    expect(screen.queryByLabelText(/birth registration number/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/registration number saved/i)).toBeInTheDocument();
   });
 
   it('disables the apply button when no seats are available', async () => {
@@ -160,7 +174,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('link', { name: /admin/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^payments/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^verify payments/i }));
     expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
     expect(screen.getByText('TRX-2026-000123')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /approve/i }));
@@ -201,6 +215,46 @@ describe('App', () => {
     expect(screen.getByText('Fatima Begum')).toBeInTheDocument();
     expect(screen.getByText('01712345678')).toBeInTheDocument();
     expect(screen.getByText('TX-MOBILE-1')).toBeInTheDocument();
+  });
+
+  it('closes the payment dialog and hides the pay button after submitting a transaction ID', async () => {
+    const application = {
+      holdId: 'h1', applicationReference: 'APP-20261111-000001', classId: 'c1', className: 'Class 6', shift: 'Morning',
+      studentName: 'Ayesha Rahman', birthRegistrationNumber: '20152691234567890', createdAt: new Date().toISOString(),
+      applicationStatus: 'Waiting for Payment', paymentStatus: 'Unpaid', seatHoldExpiry: new Date(Date.now() + 600000).toISOString()
+    };
+    let paid = false;
+    stubFetch(url => {
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      if (url.includes('/applications/search')) return json([paid ? { ...application, applicationStatus: 'Payment Under Review', paymentStatus: 'Paid', paymentMethod: 'Banking', transactionId: 'TRX-1' } : application]);
+      if (url.includes('/confirm')) { paid = true; return json({ status: 'PENDING' }); }
+      return json([]);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('link', { name: /application/i }));
+    fireEvent.change(screen.getByLabelText(/birth registration number/i), { target: { value: '20152691234567890' } });
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /pay admission fee/i }));
+
+    fireEvent.change(screen.getByLabelText(/transaction id/i), { target: { value: 'TRX-1' } });
+    fireEvent.click(screen.getByRole('button', { name: /submit for verification/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /pay admission fee/i })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: /pay admission fee/i })).not.toBeInTheDocument());
+    expect(screen.getByText('Payment Under Review')).toBeInTheDocument();
+    expect(screen.getByText('TRX-1')).toBeInTheDocument();
+  });
+
+  it('prefills the enrollment form with the saved registration number and has no required-field note', async () => {
+    localStorage.setItem('studentId', '20152691234567890');
+    stubFetch(url => json(url.endsWith('/classes') ? [sampleClass] : []));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^enroll$/i }));
+
+    expect(screen.getByLabelText(/student birth registration number/i)).toHaveValue('20152691234567890');
+    expect(screen.queryByText(/required field/i)).not.toBeInTheDocument();
   });
 
   it('shows a user-friendly message when the server is unreachable', async () => {

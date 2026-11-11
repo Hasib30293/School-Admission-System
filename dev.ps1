@@ -8,6 +8,47 @@ function Test-Port([int]$port) {
     [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
 }
 
+function Wait-Port([int]$port, [int]$timeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Port $port) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
+function Wait-Url([string]$url, [int]$timeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3 | Out-Null
+            return $true
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    return $false
+}
+
+function Test-Docker {
+    try {
+        docker info --format '{{.ServerVersion}}' 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
+# --- make sure the Docker daemon is up before trying to use it ---
+if ((Get-Command docker -ErrorAction SilentlyContinue) -and -not (Test-Docker)) {
+    $desktop = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
+    if (Test-Path $desktop) {
+        Write-Host 'Starting Docker Desktop...' -ForegroundColor Cyan
+        Start-Process -FilePath $desktop | Out-Null
+        for ($i = 0; $i -lt 60 -and -not (Test-Docker); $i++) { Start-Sleep -Seconds 2 }
+    }
+}
+
 # --- locate the .NET SDK ---
 $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
 if (-not $dotnet) {
@@ -24,7 +65,7 @@ $dotnetDir = Split-Path -Parent $dotnet
 # --- database ---
 if (Test-Port 5432) {
     Write-Host 'PostgreSQL already running on localhost:5432.' -ForegroundColor Cyan
-} elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+} elseif (Test-Docker) {
     Write-Host 'Starting PostgreSQL container...' -ForegroundColor Cyan
     docker compose -f (Join-Path $root 'docker-compose.yml') up -d postgres
 } else {
@@ -36,7 +77,7 @@ if (Test-Port 5432) {
         Start-Sleep -Seconds 2
     }
 }
-if (-not (Test-Port 5432)) {
+if (-not (Wait-Port 5432 60)) {
     Write-Warning "PostgreSQL is not reachable on localhost:5432. Start it, then rerun this script."
 }
 
@@ -47,6 +88,9 @@ if (Test-Port 8080) {
     $conn = 'Host=localhost;Port=5432;Database=school_admission;Username=admission;Password=admission'
     $backendCmd = "set `"PATH=$dotnetDir;%PATH%`" && cd /d `"$root\backend`" && set `"ConnectionStrings__Default=$conn`" && set `"ASPNETCORE_URLS=http://localhost:8080`" && dotnet run"
     Start-Process -FilePath 'cmd.exe' -ArgumentList '/k', $backendCmd | Out-Null
+    if (-not (Wait-Url 'http://localhost:8080/health' 120)) {
+        Write-Warning 'The API did not become healthy on localhost:8080. Check the API window for errors.'
+    }
 }
 
 # --- frontend ---

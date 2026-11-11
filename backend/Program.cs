@@ -51,6 +51,22 @@ using (var scope = app.Services.CreateScope())
         WHERE "ApplicationReference" IS NULL OR "ApplicationReference" = '';
         """);
     db.Database.ExecuteSqlRaw("""
+        CREATE OR REPLACE FUNCTION set_hold_application_reference() RETURNS trigger AS $$
+        BEGIN
+            IF NEW."ApplicationReference" IS NULL OR NEW."ApplicationReference" = '' THEN
+                NEW."ApplicationReference" := 'APP-' || to_char(COALESCE(NEW."CreatedAt", now()), 'YYYYMMDD') || '-' || substring(replace(NEW."Id"::text, '-', '') from 1 for 6);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS holds_application_reference ON holds;
+        CREATE TRIGGER holds_application_reference
+            BEFORE INSERT ON holds
+            FOR EACH ROW
+            EXECUTE FUNCTION set_hold_application_reference();
+        """);
+    db.Database.ExecuteSqlRaw("""
         DO $$
         BEGIN
             IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'IX_holds_ClassOfferingId_StudentId') THEN
