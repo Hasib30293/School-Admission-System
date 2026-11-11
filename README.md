@@ -12,6 +12,8 @@ Open http://localhost:3000. The API is available at http://localhost:8080.
 
 The database is persisted in the `postgres-data` Docker volume. Configure `HOLD_DURATION_SECONDS` in `docker-compose.yml` (default: 600).
 
+On first start against an empty database, the API seeds six classes (Play Group through Class 10) and fourteen students with confirmed, pending, and held applications, so the UI is populated immediately. Remove the `postgres-data` volume to start from a clean database.
+
 The frontend calls the API through its own origin: nginx proxies `/classes`, `/holds`, `/admin`, `/me` and `/health` to the `backend` service, so `http://localhost:3000` works without any CORS or host/port setup. To point the UI at a different backend, build with `VITE_API_URL` set to that backend's full URL (e.g. `VITE_API_URL=http://example.com:8080 docker compose build frontend`); when it is empty the proxy is used. The backend itself is still exposed at `http://localhost:8080`.
 
 ## Local development (one command)

@@ -77,6 +77,7 @@ using (var scope = app.Services.CreateScope())
             ON holds ("ClassOfferingId", "StudentId")
             WHERE "Status" IN ('Held', 'Pending', 'Confirmed');
         """);
+    await SeedData.EnsureSeededAsync(db);
 }
 
 app.UseCors();
