@@ -183,6 +183,23 @@ describe('App', () => {
     expect(calls.some(c => c === 'POST /holds/h1/approve')).toBe(true);
   });
 
+  it('opens the admin submenu on hover and closes it when the pointer leaves', async () => {
+    stubFetch(url => {
+      if (url.endsWith('/classes')) return json([sampleClass]);
+      return json([]);
+    });
+    render(<App />);
+
+    const adminLink = screen.getByRole('link', { name: /admin/i });
+    const group = adminLink.parentElement as HTMLElement;
+
+    fireEvent.pointerOver(group, { pointerType: 'mouse' });
+    expect(screen.getByRole('button', { name: 'Add New Class' })).toBeInTheDocument();
+
+    fireEvent.pointerOut(group, { pointerType: 'mouse' });
+    expect(screen.queryByRole('button', { name: 'Add New Class' })).not.toBeInTheDocument();
+  });
+
   it('shows EXPIRED with a disabled pay button for an expired hold, without reload', async () => {
     localStorage.setItem('studentId', '20152691234567890');
     stubFetch(url => {
