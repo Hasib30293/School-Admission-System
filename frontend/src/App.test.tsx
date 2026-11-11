@@ -211,8 +211,8 @@ describe('App', () => {
 
     expect(await screen.findByText('Ayesha Rahman')).toBeInTheDocument();
     expect(screen.getByText('20152691234567890')).toBeInTheDocument();
-    expect(screen.getByText('Abdul Rahman')).toBeInTheDocument();
-    expect(screen.getByText('Fatima Begum')).toBeInTheDocument();
+    expect(screen.queryByText('Abdul Rahman')).not.toBeInTheDocument();
+    expect(screen.queryByText('Fatima Begum')).not.toBeInTheDocument();
     expect(screen.getByText('01712345678')).toBeInTheDocument();
     expect(screen.getByText('TX-MOBILE-1')).toBeInTheDocument();
   });

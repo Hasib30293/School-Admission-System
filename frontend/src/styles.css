@@ -700,7 +700,7 @@ button:disabled { cursor: not-allowed; }
 .students-modal h3, .students-modal > p { text-align: center; }
 .students-modal .modal-actions { justify-content: flex-end; margin-top: 4px; }
 .students-scroll { flex: 0 1 auto; min-height: 0; overflow: auto; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 12px; }
-.students-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+.students-table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 13px; }
 .students-table th, .students-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .students-table th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: #526984; font-size: 12px; }
 .students-table tbody tr:last-child td { border-bottom: 0; }
