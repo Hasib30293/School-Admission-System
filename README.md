@@ -1,6 +1,8 @@
+**Live demo:** https://school-admission-system-nu.vercel.app
 # School Admission System
 
-A Dockerized school admission system built for the take-home assignment. It provides a .NET 8/PostgreSQL API and a React/Vite UI for first-come-first-served seat holds.
+A Dockerized school admission system  It provides a .NET 8/PostgreSQL API and a React/Vite UI for first-come-first-served seat holds.
+
 
 ## Run
 
